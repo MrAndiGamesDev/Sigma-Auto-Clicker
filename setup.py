@@ -24,15 +24,7 @@ def build_executable(script_file):
         '--windowed',
         '--icon=src\\Assets\\icons\\mousepointer.ico',
         '--optimize=2',
-        '--log-level=INFO',
         '--strip',
-        '--noupx',
-        '--hidden-import=pyautogui',
-        '--hidden-import=pynput',
-        '--collect-all=pyautogui',
-        '--collect-submodules=pynput',
-        '--collect-data=pyautogui',
-        '--target-architecture=x86_64',
         '--clean',
     ]
 
