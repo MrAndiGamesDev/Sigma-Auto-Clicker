@@ -21,6 +21,7 @@ from PySide6.QtCore import Qt
 APP_TITLE = "Sigma Auto Clicker"
 HOTKEY = "F3"
 ICON_URL = "https://raw.githubusercontent.com/MrAndiGamesDev/My-App-Icons/refs/heads/main/mousepointer.ico"
+
 SYSTEM = platform.system()
 HOME_DIR = os.path.expanduser("~")
 APPDATA_DIR = os.path.join(HOME_DIR, "AppData", "Roaming", "SigmaAutoClicker") 
@@ -281,7 +282,7 @@ class AutoClickerApp(QMainWindow):
     def update_theme(self):
         mode = self.appearance_combo.currentText()
         self.setStyleSheet(BASE_STYLE.get(mode, BASE_STYLE["Dark"]))
-        self.update_color_theme()  # Ensure buttons respect color theme
+        self.update_color_theme()
 
     def update_color_theme(self):
         color = self.color_combo.currentText()
@@ -306,14 +307,44 @@ class AutoClickerApp(QMainWindow):
     def setup_tray(self):
         tray_icon = QSystemTrayIcon(QIcon(APP_ICON if APP_ICON else QIcon()))
         tray_icon.setToolTip(APP_TITLE)
+        
         tray_menu = QMenu()
-        tray_menu.addAction(QAction("Show Window", self, triggered=self.show))
+        
+        # Show the main window
+        tray_menu.addAction(QAction("Show Window", self, triggered=self.show_normal))
+        
+        # Start / Stop clicking
         tray_menu.addAction(QAction("Start / Stop", self, triggered=self.toggle_clicking))
-        tray_menu.addAction(QAction("Exit", self, triggered=self.close))
+        
+        # Quit the app completely
+        tray_menu.addAction(QAction("Quit", self, triggered=self.quit_app))
+        
         tray_icon.setContextMenu(tray_menu)
         tray_icon.show()
+        
         self.tray_icon = tray_icon
 
+    def show_normal(self):
+        """Show window and bring to front"""
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def closeEvent(self, event):
+        """Intercept close button: hide window instead of quitting"""
+        event.ignore()
+        self.hide()
+        self.tray_icon.showMessage(
+            APP_TITLE,
+            "App minimized to tray. Use the tray icon to quit.",
+            QSystemTrayIcon.Information,
+            2000
+        )
+
+    def quit_app(self):
+        """Fully quit the app"""
+        self.tray_icon.hide()
+        QApplication.quit()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
