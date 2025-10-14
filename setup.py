@@ -1,22 +1,16 @@
 import os
 import shutil
 import sys
-import subprocess
 import PyInstaller.__main__
 
 def clean_build_dirs():
-    for folder in ['build', 'dist']:
+    folder_lists = ['build', 'dist']
+    for folder in folder_lists:
         if os.path.exists(folder):
             print(f"Removing {folder} directory...")
             shutil.rmtree(folder)
 
-def install_requirements():
-    req_file = 'requirements.txt'
-    if os.path.exists(req_file):
-        print("Installing requirements...")
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-r', req_file])
-
-def build_executable(script_file):
+def build_executable(script_file: str):
     pyinstaller_args = [
         script_file,
         '--noconfirm',
@@ -35,10 +29,9 @@ def build_executable(script_file):
     except Exception as e:
         print(f"PyInstaller failed: {e}")
 
-def main():
+async def main():
     script = sys.argv[1] if len(sys.argv) > 1 else 'autoclicker.py'
     clean_build_dirs()
-    install_requirements()
     build_executable(script)
 
 if __name__ == "__main__":

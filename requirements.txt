@@ -1,0 +1,6 @@
+keyboard
+mouse
+Pillow
+pyautogui
+PySide6
+PyInstaller

@@ -1,7 +1,7 @@
 import subprocess
 import sys
 
-def UpdatePackages():
+def update_packages():
     # Get list of outdated packages
     result = subprocess.run(
         [sys.executable, '-m', 'pip', 'list', '--outdated', '--format=freeze'],
@@ -19,4 +19,4 @@ def UpdatePackages():
         subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade', package])
 
 if __name__ == "__main__":
-    UpdatePackages()
+    update_packages()

@@ -2,7 +2,7 @@
 setlocal
 
 :: Path to the virtual environment
-set VENV_PATH=AutoClickerPy\Scripts
+set VENV_PATH=.venv\Scripts
 
 :: Check if the virtual environment is active
 if defined VIRTUAL_ENV (
@@ -10,7 +10,7 @@ if defined VIRTUAL_ENV (
     call "%VENV_PATH%\deactivate.bat"
 ) else (
     echo Activating virtual environment...
-    "%VENV_PATH%\Activate.ps1"
+    call "%VENV_PATH%\activate.bat"
 )
 
 endlocal
