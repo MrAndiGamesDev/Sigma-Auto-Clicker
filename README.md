@@ -20,11 +20,10 @@ Sigma Auto Clicker allows users to automate mouse clicks efficiently with custom
 - Hotkey support for start/stop  
 - System tray integration  
 - Multi-platform compatibility (Windows)  
-- Lightweight and easy-to-use interface  
-
+- Lightweight and easy-to-use interface 
 ---
 
 ## ⚙️ Installation
 1. Clone this repository:
    ```bash
-   git clone https://github.com/yourusername/sigma-auto-clicker](https://github.com/MrAndiGamesDev/Sigma-Auto-Clicker-Pro.git
+   git clone (https://github.com/MrAndiGamesDev/Sigma-Auto-Clicker-Pro.git
