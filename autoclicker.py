@@ -1,11 +1,12 @@
 import sys
-import threading
-import time
-import pyautogui
-import platform
 import os
-import urllib.request
+import time
+import platform
+import threading
 import subprocess
+import urllib.request
+
+import pyautogui
 import keyboard
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QLineEdit, QPushButton,
@@ -13,18 +14,19 @@ from PySide6.QtWidgets import (
     QComboBox, QSystemTrayIcon, QMenu, QFormLayout
 )
 from PySide6.QtGui import QIcon, QAction
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer, QEvent
 
 # ======================
 # CONFIG
 # ======================
-APP_TITLE = "Sigma Auto Clicker"
+APP_VERSION = "1.0.3"
+APP_TITLE = f"Sigma Auto Clicker v{APP_VERSION}"
 HOTKEY = "F3"
 ICON_URL = "https://raw.githubusercontent.com/MrAndiGamesDev/My-App-Icons/refs/heads/main/mousepointer.ico"
 
 SYSTEM = platform.system()
 HOME_DIR = os.path.expanduser("~")
-APPDATA_DIR = os.path.join(HOME_DIR, "AppData", "Roaming", "SigmaAutoClicker") 
+APPDATA_DIR = os.path.join(HOME_DIR, "AppData", "Roaming", "SigmaAutoClicker")
 APP_ICON = os.path.join(APPDATA_DIR, "mousepointer.ico")
 
 # ======================
@@ -66,36 +68,30 @@ BASE_STYLE = {
 }
 
 COLOR_THEMES = {
-    "Blue": "#0a84ff",
-    "Green": "#28a745",
-    "Dark-Blue": "#0b5ed7",
-    "Red": "#d32f2f",
-    "Orange": "#ff9800",
-    "Purple": "#9c27b0",
-    "Teal": "#009688",
-    "Pink": "#e91e63",
-    "Yellow": "#fbc02d",
-    "Cyan": "#00bcd4",
-    "Gray": "#6c757d",
-    "Indigo": "#3f51b5",
+    "Blue": "#0a84ff", "Green": "#28a745", "Dark-Blue": "#0b5ed7",
+    "Red": "#d32f2f", "Orange": "#ff9800", "Purple": "#9c27b0",
+    "Teal": "#009688", "Pink": "#e91e63", "Yellow": "#fbc02d",
+    "Cyan": "#00bcd4", "Gray": "#6c757d", "Indigo": "#3f51b5",
 }
 
 # ======================
-# HELPER FUNCTIONS
+# HELPERS
 # ======================
-def ensure_hidden_directory(path):
+def ensure_hidden_directory(path: str):
     if not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
     if SYSTEM == "Windows":
         subprocess.run(["attrib", "+H", path], check=True)
 
-def download_icon():
+
+def download_icon() -> str:
     ensure_hidden_directory(APPDATA_DIR)
     if not os.path.exists(APP_ICON):
         urllib.request.urlretrieve(ICON_URL, APP_ICON)
         if SYSTEM == "Windows":
             subprocess.run(["attrib", "+H", APP_ICON], check=True)
     return APP_ICON
+
 
 # ======================
 # MAIN APP
@@ -113,61 +109,47 @@ class AutoClickerApp(QMainWindow):
         self.cycle_count = 0
         self.click_thread = None
 
-        # Layout
+        # Main layout
         self.main_widget = QWidget()
         self.setCentralWidget(self.main_widget)
         self.main_layout = QVBoxLayout(self.main_widget)
         self.main_layout.setContentsMargins(15, 15, 15, 15)
         self.main_layout.setSpacing(10)
 
-        # Header
+        self._build_header()
+        self._build_tabs()
+        self._build_bottom_controls()
+        self._setup_hotkey()
+        self._setup_tray()
+        self._setup_theme_handlers()
+
+    # ----------------------
+    # UI BUILDERS
+    # ----------------------
+    def _build_header(self):
         self.header = QLabel(f"⚙️ {APP_TITLE}")
         self.header.setStyleSheet("font-size: 22px; font-weight: bold;")
         self.main_layout.addWidget(self.header, alignment=Qt.AlignLeft)
 
-        # Tabs
+    def _build_tabs(self):
         self.tabs = QTabWidget()
         self.main_layout.addWidget(self.tabs)
 
-        # Build tabs
+        # Tabs
         self.settings_tab = QWidget()
         self.log_tab = QWidget()
+        self.update_tab = QWidget()
+
         self.tabs.addTab(self.settings_tab, "Settings")
         self.tabs.addTab(self.log_tab, "Activity Log")
+        self.tabs.addTab(self.update_tab, "Update Logs")
 
-        self.build_settings_tab()
-        self.build_log_tab()
+        # Build content
+        self._build_settings_tab()
+        self._build_log_tab()
+        self._build_update_tab()
 
-        # Bottom controls
-        self.start_btn = QPushButton(f"▶️ Start ({HOTKEY})")
-        self.stop_btn = QPushButton(f"⏹️ Stop ({HOTKEY})")
-        self.stop_btn.setEnabled(False)
-
-        self.start_btn.clicked.connect(self.toggle_clicking)
-        self.stop_btn.clicked.connect(self.stop_clicking)
-
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-        btn_layout.addWidget(self.start_btn)
-        btn_layout.addWidget(self.stop_btn)
-        self.main_layout.addLayout(btn_layout)
-
-        # Hotkey
-        keyboard.add_hotkey(HOTKEY, self.toggle_clicking)
-
-        # System tray
-        self.setup_tray()
-
-        # Theme handlers
-        self.appearance_combo.currentTextChanged.connect(self.update_theme)
-        self.color_combo.currentTextChanged.connect(self.update_color_theme)
-        self.update_theme()
-        self.update_color_theme()
-
-    # ----------------------
-    # Build Settings Tab
-    # ----------------------
-    def build_settings_tab(self):
+    def _build_settings_tab(self):
         layout = QVBoxLayout(self.settings_tab)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
@@ -201,30 +183,129 @@ class AutoClickerApp(QMainWindow):
         theme_form.addRow("Progress:", self.progress_label)
         layout.addWidget(theme_group)
 
-    # ----------------------
-    # Build Log Tab
-    # ----------------------
-    def build_log_tab(self):
+    def _build_log_tab(self):
         layout = QVBoxLayout(self.log_tab)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
+        self.log_text.setStyleSheet("font-size: 15px; font-weight: bold;")
         layout.addWidget(self.log_text)
 
         export_btn = QPushButton("💾 Export Log")
         export_btn.clicked.connect(self.export_log)
         layout.addWidget(export_btn, alignment=Qt.AlignRight)
 
+    def _build_update_tab(self):
+        layout = QVBoxLayout(self.update_tab)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
+
+        self.update_text = QTextEdit()
+        self.update_text.setReadOnly(True)
+        self.update_text.setStyleSheet("""
+            font-size: 15px;
+            font-weight: bold;
+            background-color: #2e2e3e;
+            color: #ffffff;
+            border: 1px solid #444;
+            border-radius: 5px;
+            padding: 5px;
+        """)
+        layout.addWidget(self.update_text)
+
+        self.set_update_logs([
+            "2025-10-14:\n- Added Update Logs tab and color themes.\n- Removed notification during minimize \n- Bug Fixes \n- And Much More!",
+            "2025-10-13:\n- Initial release of Sigma Auto Clicker."
+        ])
+
+        export_btn = QPushButton("💾 Export Update Logs")
+        export_btn.setStyleSheet("padding: 5px; border-radius: 6px; background-color: #0a84ff; color: white;")
+        export_btn.clicked.connect(self.export_update_logs)
+        layout.addWidget(export_btn, alignment=Qt.AlignRight)
+
+    def set_update_logs(self, logs: list[str]):
+        self.update_text.setPlainText("\n\n".join(logs))
+
     # ----------------------
-    # Click Logic
+    # Bottom Controls
+    # ----------------------
+    def _build_bottom_controls(self):
+        self.start_btn = QPushButton(f"▶️ Start ({HOTKEY})")
+        self.stop_btn = QPushButton(f"⏹️ Stop ({HOTKEY})")
+        self.stop_btn.setEnabled(False)
+
+        self.start_btn.clicked.connect(self.toggle_clicking)
+        self.stop_btn.clicked.connect(self.stop_clicking)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_layout.addWidget(self.start_btn)
+        btn_layout.addWidget(self.stop_btn)
+        self.main_layout.addLayout(btn_layout)
+
+    # ----------------------
+    # Hotkey
+    # ----------------------
+    def _setup_hotkey(self):
+        keyboard.add_hotkey(HOTKEY, self.toggle_clicking)
+
+    # ----------------------
+    # System Tray
+    # ----------------------
+    def _setup_tray(self):
+        tray_icon = QSystemTrayIcon(QIcon(APP_ICON))
+        tray_icon.setToolTip(APP_TITLE)
+
+        tray_menu = QMenu()
+        tray_menu.addAction(QAction("Show Window", self, triggered=self.show_normal))
+        tray_menu.addAction(QAction("Start / Stop", self, triggered=self.toggle_clicking))
+        tray_menu.addAction(QAction("Quit", self, triggered=self.quit_app))
+
+        tray_icon.setContextMenu(tray_menu)
+        tray_icon.show()
+        self.tray_icon = tray_icon
+
+    def show_normal(self):
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    # ----------------------
+    # Theme Handlers
+    # ----------------------
+    def _setup_theme_handlers(self):
+        self.appearance_combo.currentTextChanged.connect(self.update_theme)
+        self.color_combo.currentTextChanged.connect(self.update_color_theme)
+        self.update_theme()
+        self.update_color_theme()
+
+    def update_theme(self):
+        mode = self.appearance_combo.currentText()
+        self.setStyleSheet(BASE_STYLE.get(mode, BASE_STYLE["Dark"]))
+        self.update_color_theme()
+
+    def update_color_theme(self):
+        color = self.color_combo.currentText()
+        if color in COLOR_THEMES:
+            btn_color = COLOR_THEMES[color]
+            self.start_btn.setStyleSheet(f"background-color: {btn_color}; color: white; border-radius: 6px; padding: 5px;")
+            self.stop_btn.setStyleSheet("background-color: #D32F2F; color: white; border-radius: 6px; padding: 5px;")
+            self.tabs.setStyleSheet(f"""
+                QTabBar::tab:selected {{ background: {btn_color}; color: white; }}
+                QTabBar::tab {{ background: #2e2e3e; color: #aaa; padding: 8px; border-top-left-radius: 6px; border-top-right-radius: 6px; }}
+            """)
+
+    # ----------------------
+    # Clicking Logic
     # ----------------------
     def toggle_clicking(self):
+        self.running = not self.running
         if self.running:
-            self.stop_clicking()
-        else:
             self.start_clicking()
+        else:
+            self.stop_clicking()
 
     def start_clicking(self):
         self.running = True
@@ -243,10 +324,10 @@ class AutoClickerApp(QMainWindow):
         self.log("Stopped clicking")
 
     def _click_loop(self):
-        click_delay = float(self.click_delay.text() or 0.05)
-        cycle_delay = float(self.cycle_delay.text() or 0.5)
         clicks_per_cycle = int(self.click_count.text() or 1)
         max_loops = int(self.loop_count.text() or 0)
+        click_delay = float(self.click_delay.text() or 0.05)
+        cycle_delay = float(self.cycle_delay.text() or 0.5)
 
         while self.running and (max_loops == 0 or self.cycle_count < max_loops):
             for _ in range(clicks_per_cycle):
@@ -266,7 +347,7 @@ class AutoClickerApp(QMainWindow):
     # ----------------------
     # Logging
     # ----------------------
-    def log(self, msg):
+    def log(self, msg: str):
         ts = time.strftime("%H:%M:%S")
         self.log_text.append(f"[{ts}] {msg}")
 
@@ -276,73 +357,35 @@ class AutoClickerApp(QMainWindow):
             with open(path, "w") as f:
                 f.write(self.log_text.toPlainText())
 
-    # ----------------------
-    # Theme Updates
-    # ----------------------
-    def update_theme(self):
-        mode = self.appearance_combo.currentText()
-        self.setStyleSheet(BASE_STYLE.get(mode, BASE_STYLE["Dark"]))
-        self.update_color_theme()
-
-    def update_color_theme(self):
-        color = self.color_combo.currentText()
-        if color in COLOR_THEMES:
-            btn_color = COLOR_THEMES[color]
-            self.start_btn.setStyleSheet(
-                f"background-color: {btn_color}; color: white; border-radius: 6px; padding: 5px;"
-            )
-            self.stop_btn.setStyleSheet(
-                f"background-color: #D32F2F; color: white; border-radius: 6px; padding: 5px;"
-            )
-            # Update tabs
-            tab_style = f"""
-                QTabBar::tab:selected {{ background: {btn_color}; color: white; }}
-                QTabBar::tab {{ background: #2e2e3e; color: #aaa; padding: 8px; border-top-left-radius: 6px; border-top-right-radius: 6px; }}
-            """
-            self.tabs.setStyleSheet(tab_style)
+    def export_update_logs(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Export Update Logs", "", "Text Files (*.txt)")
+        if path:
+            with open(path, "w") as f:
+                f.write(self.update_text.toPlainText())
 
     # ----------------------
-    # System Tray
+    # Window Events
     # ----------------------
-    def setup_tray(self):
-        tray_icon = QSystemTrayIcon(QIcon(APP_ICON if APP_ICON else QIcon()))
-        tray_icon.setToolTip(APP_TITLE)
-        
-        tray_menu = QMenu()
-        
-        # Show the main window
-        tray_menu.addAction(QAction("Show Window", self, triggered=self.show_normal))
-        
-        # Start / Stop clicking
-        tray_menu.addAction(QAction("Start / Stop", self, triggered=self.toggle_clicking))
-        
-        # Quit the app completely
-        tray_menu.addAction(QAction("Quit", self, triggered=self.quit_app))
-        
-        tray_icon.setContextMenu(tray_menu)
-        tray_icon.show()
-        
-        self.tray_icon = tray_icon
-
-    def show_normal(self):
-        """Show window and bring to front"""
-        self.show()
-        self.raise_()
-        self.activateWindow()
+    def changeEvent(self, event):
+        if event.type() == QEvent.WindowStateChange:
+            if self.isMinimized():
+                QTimer.singleShot(0, self.hide)  # Hide window immediately
+                self.tray_icon.showMessage(
+                    APP_TITLE,
+                    "Sigma Auto Clicker is running in the background.",
+                    QSystemTrayIcon.Information,
+                    3000
+                )
+        super().changeEvent(event)
 
     def closeEvent(self, event):
-        """Intercept close button: hide window instead of quitting"""
         event.ignore()
         self.hide()
-        self.tray_icon.showMessage(
-            APP_TITLE,
-            "App minimized to tray. Use the tray icon to quit.",
-            QSystemTrayIcon.Information,
-            2000
-        )
 
+    # ----------------------
+    # Quit
+    # ----------------------
     def quit_app(self):
-        """Fully quit the app"""
         self.tray_icon.hide()
         QApplication.quit()
 

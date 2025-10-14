@@ -29,7 +29,7 @@ def build_executable(script_file: str):
     except Exception as e:
         print(f"PyInstaller failed: {e}")
 
-async def main():
+def main():
     script = sys.argv[1] if len(sys.argv) > 1 else 'autoclicker.py'
     clean_build_dirs()
     build_executable(script)
