@@ -27,9 +27,8 @@ share/python-wheels/
 .installed.cfg
 *.egg
 pip-wheel-metadata/
-sign.ps1
+sign.*
 signtool.exe
-sign.bat
 MANIFEST
 
 # PyInstaller
