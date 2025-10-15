@@ -1,4 +1,4 @@
-# 🚀 RELEASED: Sigma Auto Clicker
+# 🚀 UPDATED: Sigma Auto Clicker
 
 ![Sigma Auto Clicker](https://github.com/user-attachments/assets/a23f8750-f22a-45d3-bc45-b614593e2ca7)
 
@@ -28,3 +28,4 @@ Sigma Auto Clicker allows users to automate mouse clicks efficiently with custom
    ```bash
    git clone https://github.com/MrAndiGamesDev/Sigma-Auto-Clicker-Pro.git
    cd ./Sigma-Auto-Clicker-Pro
+
