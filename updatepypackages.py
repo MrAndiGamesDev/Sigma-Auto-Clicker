@@ -17,7 +17,7 @@ class PackageUpdater:
         """Retrieve a list of outdated package names."""
         try:
             result = subprocess.run(
-                [sys.executable, "-m", "pip", "list", "--outdated", "--format=freeze"],
+                [sys.executable, "-m", "pip", "list", "--outdated"],
                 capture_output=True,
                 text=True,
                 check=True,
