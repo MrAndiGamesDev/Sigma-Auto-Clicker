@@ -12,7 +12,7 @@ Sigma Auto Clicker allows users to automate mouse clicks efficiently with custom
 ## 💻 Programming Language / Framework
 - **Language:** Python  
 - **GUI Framework:** CustomTkinter  
-- **Dependencies:** pyautogui, keyboard, pystray, PIL  
+- **Dependencies:** pyautogui, keyboard, pystray, PIL, src/Packages/CustomDialogPopup (custom made), src/Packages/CustomLogging (also custom made)
 ---
 
 ## ✨ Features
