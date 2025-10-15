@@ -12,6 +12,8 @@ build/
 develop-eggs/
 dist/
 downloads/
+AutoClickerPy/
+AutoClickerPy/*
 eggs/
 .eggs/
 lib/
@@ -24,6 +26,10 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+pip-wheel-metadata/
+sign.ps1
+signtool.exe
+sign.bat
 MANIFEST
 
 # PyInstaller
