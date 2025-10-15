@@ -1,1 +1,1 @@
-pip uninstall keyboard mouse Pillow pyautogui PySide6 PyInstaller -y 
+pip uninstall keyboard mouse Pillow pyautogui PySide6 PyInstaller colorama -y 
