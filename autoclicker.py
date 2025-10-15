@@ -229,7 +229,7 @@ class AutoClickerApp(QMainWindow):
         layout.addWidget(self.update_text)
 
         self.set_update_logs([
-            "2025-10-14:\n- Fixed Light Mode Support in tabs/tabs btns and infoframes \n- And Much More!",
+            "2025-10-14:\n- Fixed Light Mode Support in tabs/tabs btns and infoframes \n- UI Improvements \n- And Much More!",
             "2025-10-14:\n- Added Update Logs tab and color themes.\n- Removed notification during minimize \n- Bug Fixes \n- And Much More!",
             "2025-10-13:\n- Initial release of Sigma Auto Clicker."
         ])
