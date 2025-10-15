@@ -27,6 +27,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 pip-wheel-metadata/
+certificate.*
 sign.*
 signtool.exe
 MANIFEST
