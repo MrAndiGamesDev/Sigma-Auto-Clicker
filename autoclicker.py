@@ -19,7 +19,7 @@ from PySide6.QtCore import Qt, QTimer, QEvent
 # ======================
 # CONFIG
 # ======================
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.0.4"
 APP_TITLE = f"Sigma Auto Clicker v{APP_VERSION}"
 HOTKEY = "F3"
 ICON_URL = "https://raw.githubusercontent.com/MrAndiGamesDev/My-App-Icons/refs/heads/main/mousepointer.ico"
@@ -68,10 +68,24 @@ BASE_STYLE = {
 }
 
 COLOR_THEMES = {
-    "Blue": "#0a84ff", "Green": "#28a745", "Dark-Blue": "#0b5ed7",
-    "Red": "#d32f2f", "Orange": "#ff9800", "Purple": "#9c27b0",
-    "Teal": "#009688", "Pink": "#e91e63", "Yellow": "#fbc02d",
-    "Cyan": "#00bcd4", "Gray": "#6c757d", "Indigo": "#3f51b5",
+    "Blue": "#0a84ff",
+    "Green": "#28a745",
+    "Dark-Blue": "#0b5ed7",
+    "Red": "#d32f2f",
+    "Orange": "#ff9800",
+    "Purple": "#9c27b0",
+    "Teal": "#009688",
+    "Pink": "#e91e63",
+    "Yellow": "#fbc02d",
+    "Cyan": "#00bcd4",
+    "Gray": "#6c757d",
+    "Indigo": "#3f51b5",
+    "Lime": "#cddc39",
+    "Amber": "#ffc107",
+    "Deep-Purple": "#673ab7",
+    "Brown": "#795548",
+    "Mint": "#4caf50",
+    "Coral": "#ff6f61",
 }
 
 # ======================
@@ -80,9 +94,9 @@ COLOR_THEMES = {
 def ensure_hidden_directory(path: str):
     if not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
+
     if SYSTEM == "Windows":
         subprocess.run(["attrib", "+H", path], check=True)
-
 
 def download_icon() -> str:
     ensure_hidden_directory(APPDATA_DIR)
@@ -195,6 +209,7 @@ class AutoClickerApp(QMainWindow):
 
         export_btn = QPushButton("💾 Export Log")
         export_btn.clicked.connect(self.export_log)
+        export_btn.setStyleSheet("font-size: 15px; font-weight: bold;")
         layout.addWidget(export_btn, alignment=Qt.AlignRight)
 
     def _build_update_tab(self):
@@ -207,8 +222,6 @@ class AutoClickerApp(QMainWindow):
         self.update_text.setStyleSheet("""
             font-size: 15px;
             font-weight: bold;
-            background-color: #2e2e3e;
-            color: #ffffff;
             border: 1px solid #444;
             border-radius: 5px;
             padding: 5px;
@@ -216,12 +229,13 @@ class AutoClickerApp(QMainWindow):
         layout.addWidget(self.update_text)
 
         self.set_update_logs([
+            "2025-10-14:\n- Fixed Light Mode Support in tabs/tabs btns and infoframes \n- And Much More!",
             "2025-10-14:\n- Added Update Logs tab and color themes.\n- Removed notification during minimize \n- Bug Fixes \n- And Much More!",
             "2025-10-13:\n- Initial release of Sigma Auto Clicker."
         ])
 
         export_btn = QPushButton("💾 Export Update Logs")
-        export_btn.setStyleSheet("padding: 5px; border-radius: 6px; background-color: #0a84ff; color: white;")
+        export_btn.setStyleSheet("font-size: 15px; font-weight: bold;")
         export_btn.clicked.connect(self.export_update_logs)
         layout.addWidget(export_btn, alignment=Qt.AlignRight)
 
@@ -235,7 +249,6 @@ class AutoClickerApp(QMainWindow):
         self.start_btn = QPushButton(f"▶️ Start ({HOTKEY})")
         self.stop_btn = QPushButton(f"⏹️ Stop ({HOTKEY})")
         self.stop_btn.setEnabled(False)
-
         self.start_btn.clicked.connect(self.toggle_clicking)
         self.stop_btn.clicked.connect(self.stop_clicking)
 
@@ -290,11 +303,11 @@ class AutoClickerApp(QMainWindow):
         color = self.color_combo.currentText()
         if color in COLOR_THEMES:
             btn_color = COLOR_THEMES[color]
-            self.start_btn.setStyleSheet(f"background-color: {btn_color}; color: white; border-radius: 6px; padding: 5px;")
-            self.stop_btn.setStyleSheet("background-color: #D32F2F; color: white; border-radius: 6px; padding: 5px;")
+            self.start_btn.setStyleSheet(f"background-color: {btn_color}; color: white; border-radius: 6px; padding: 5px; font-size: 15px; font-weight: bold;")
+            self.stop_btn.setStyleSheet("color: white; border-radius: 6px; padding: 5px; font-size: 15px; font-weight: bold;")
             self.tabs.setStyleSheet(f"""
                 QTabBar::tab:selected {{ background: {btn_color}; color: white; }}
-                QTabBar::tab {{ background: #2e2e3e; color: #aaa; padding: 8px; border-top-left-radius: 6px; border-top-right-radius: 6px; }}
+                QTabBar::tab {{ color: #aaa; padding: 8px; border-top-left-radius: 6px; border-top-right-radius: 6px; font-size: 15px; font-weight: bold;}}
             """)
 
     # ----------------------
