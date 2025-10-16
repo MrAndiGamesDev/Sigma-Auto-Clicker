@@ -1,8 +1,8 @@
-keyboard==0.13.5
-mouse==0.7.1
-Pillow==10.4.0
-pyautogui==0.9.54
-customtkinter==5.2.2
-PyInstaller==6.16.0
-colorama==0.4.6
-requests==2.32.5
+keyboard
+mouse
+Pillow
+pyautogui
+customtkinter
+PyInstaller
+colorama
+requests
