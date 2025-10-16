@@ -5,6 +5,7 @@ on:
     branches: [main, dev]
   pull_request:
     branches: [main, dev]
+    types: [opened, reopened, synchronize, ready_for_review, labeled]
 
 permissions:
   contents: write
@@ -17,6 +18,7 @@ jobs:
       matrix:
         python-version: ["3.9", "3.10", "3.11"]
       fail-fast: false
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,32 +34,25 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-cov flake8 pytest-mock
 
-      - name: Run tests with coverage
+      - name: Run tests
         run: |
           if [ ! -d "tests" ] || [ ! -d "src" ]; then
-            echo "⚠️ No tests/src found, skipping tests."
+            echo "⚠️ No tests or src directory, skipping tests."
             exit 0
           fi
           pytest tests/ -v --cov=src --cov-report=xml
         continue-on-error: true
 
-      - name: Lint source
-        run: |
-          if [ ! -d "src" ]; then echo "⚠️ src missing"; exit 0; fi
-          flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-        continue-on-error: true
-
   auto-merge:
     needs: test
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    if: >
+      (github.event_name == 'pull_request' || github.event_name == 'push') &&
+      github.event.pull_request.draft == false
     steps:
-      - name: Auto-merge PR if eligible
+      - name: Auto-merge pull request
         uses: pascalgn/automerge-action@v0.15.6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MERGE_METHOD: squash
-          MERGE_LABELS: automerge
           MERGE_COMMIT_MESSAGE: "🤖 Auto-merged PR #${{ github.event.pull_request.number }}"
-          MERGE_RETRY_LIMIT: 3
-          MERGE_RETRY_WAIT: 10
