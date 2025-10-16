@@ -22,14 +22,13 @@ from PySide6.QtCore import Qt, QTimer, QThread, Signal as pyqtSignal
 pyautogui.PAUSE = 0
 pyautogui.FAILSAFE = False
 
-
 class Config:
     """Application configuration constants"""
     APP_NAME = "Sigma Auto Clicker"
     HOTKEY = "F3"
-    # Using a placeholder icon - replace with your actual icon URL
+
     ICON_URL = "https://raw.githubusercontent.com/MrAndiGamesDev/My-App-Icons/main/mousepointer.ico"
-    # Fallback to a simple version check - you can replace with actual repo
+
     GITHUB_REPO = "MrAndiGamesDev/SigmaAutoClicker"  # Update this to your actual repo
     UPDATE_CHECK_INTERVAL = 24 * 60 * 60 * 1000  # 24 hours in ms
     DEFAULT_VERSION = "1.0.0"
@@ -48,12 +47,11 @@ class Config:
     VERSION_CACHE_FILE = APPDATA_DIR / "version_cache.txt"
     
     UPDATE_LOGS = [
-        "2025-10-16: Added automatic update checking and version management",
+        "2025-10-16: Added automatic update checking Version management UI/Code improvements UI Improvements And Much More!",
         "2025-10-15: Fixed Light Mode support and UI improvements",
         "2025-10-14: Added Update Logs tab and color themes",
         "2025-10-13: Initial release"
     ]
-
 
 class FileManager:
     """Handles file operations and persistence"""
@@ -114,7 +112,6 @@ class FileManager:
             Config.UPDATE_CHECK_FILE.write_text(datetime.now().isoformat())
         except Exception:
             pass
-
 
 class VersionManager:
     """Manages application versioning and updates"""
@@ -225,7 +222,6 @@ class VersionManager:
         except:
             return new > current
 
-
 class UpdateChecker(QThread):
     """Background thread for checking updates"""
     
@@ -255,9 +251,6 @@ class UpdateChecker(QThread):
                 
         except Exception as e:
             self.check_completed.emit(False, f"Update check failed: {str(e)}")
-
-
-# ... (Styles, UIManager, SystemTrayManager, ClickerEngine classes remain the same as previous version)
 
 class Styles:
     """UI styling management"""
@@ -317,7 +310,6 @@ class Styles:
     def get_button_style(cls, theme: str) -> str:
         color = cls.COLOR_THEMES.get(theme, "#0a84ff")
         return f"QPushButton {{ background-color: {color}; color: white; border: none; border-radius: 6px; padding: 8px; font-weight: bold; }} QPushButton:hover {{ background-color: {color[:-2]}cc; }}"
-
 
 class UIManager:
     """Manages UI components and styling"""
@@ -431,7 +423,6 @@ class UIManager:
             logs = "\n\n".join(Config.UPDATE_LOGS)
             self.widgets['update_text'].setPlainText(logs)
 
-
 class SystemTrayManager:
     """Manages system tray functionality"""
     
@@ -497,7 +488,6 @@ class SystemTrayManager:
                 QSystemTrayIcon.Information,
                 2000
             )
-
 
 class ClickerEngine:
     """Core clicking functionality"""
@@ -567,7 +557,6 @@ class ClickerEngine:
             'click_delay': max(0.01, float(widgets.get('click_delay', QLineEdit("1")).text() or 1)),
             'cycle_delay': max(0.01, float(widgets.get('cycle_delay', QLineEdit("0.5")).text() or 0.5))
         }
-
 
 class AutoClickerApp(QMainWindow):
     """Main application class"""
