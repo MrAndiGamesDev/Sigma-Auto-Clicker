@@ -25,3 +25,29 @@ jobs:
         MERGE_COMMIT_MESSAGE: "pull-request-title-and-description"
         MERGE_RETRY_COUNT: 3
         MERGE_RETRY_WAIT: 10
+        MERGE_ALLOW_SQUASH: false
+        MERGE_ALLOW_REBASE: false
+        MERGE_ALLOW_MERGE: true
+        MERGE_REQUIRE_ALL_CHECKS: true
+        MERGE_REQUIRE_SUCCESSFUL_CHECKS: true
+        MERGE_REQUIRE_UP_TO_DATE: true
+        MERGE_REQUIRE_NO_CONFLICTS: true
+        MERGE_REQUIRE_APPROVALS_BEFORE_CHECKS: false
+        MERGE_EXCLUDE_DRAFTS: true
+        MERGE_EXCLUDE_WIP: true
+        MERGE_EXCLUDE_LABELS: "do not merge, wip"
+        MERGE_ONLY_LABELS: ""
+        MERGE_ONLY_AUTHOR: ""
+        MERGE_ONLY_TEAM: ""
+        MERGE_ONLY_MILESTONE: ""
+        MERGE_SKIP_CI: false
+        MERGE_SKIP_CI_PHRASE: "[skip ci]"
+        MERGE_DEBUG: false
+        MERGE_VERBOSE: false
+        MERGE_FAIL_ON_ERROR: true
+        MERGE_FAIL_ON_NON_EXISTING: false
+        MERGE_FAIL_ON_CONFLICTS: false
+        MERGE_FAIL_ON_CHECKS: false
+        MERGE_FAIL_ON_APPROVALS: false
+        MERGE_FAIL_ON_UP_TO_DATE: false # New line added
+        MERGE_FAIL_ON_DRAFT: false
