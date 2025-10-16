@@ -212,23 +212,100 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 # Python Bytecode and Optimized Files
-# Ignores compiled Python files, Windows DLLs, and shared objects
-__pycache__/           # Cache directories for Python 3 bytecode
-*.py[cod]              # Compiled (.pyc), optimized (.pyo), debug (.pyd)
-*$py.class             # Jython class files (rare, included for completeness)
-*.pyd                  # Windows Python extension DLLs
-*.so                   # Shared object files (Linux/macOS)
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+*.so
 
 # PyInstaller Artifacts
-# Ignores build outputs from PyInstaller for Windows executable
-build/                 # Temporary build directory
-dist/                  # Distribution directory with final executable
-*.spec                 # PyInstaller spec files
-*.manifest             # Windows manifest files for executable metadata
-Sigma-Auto-Clicker.exe # Project-specific executable output
-# FIX 1: Removed redundant 'AutoClickerPy/*' and kept 'AutoClickerPy/'
-# Reason: 'AutoClickerPy/' already ignores the directory and all contents
-AutoClickerPy/         # Potential PyInstaller output directory
+build/
+dist/
+*.spec
+*.manifest
+Sigma-Auto-Clicker.exe
+AutoClickerPy/
+
+# Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.env
+.envrc
+
+# Dependency Management
+# Pipenv
+# Pipfile.lock
+# Poetry
+# poetry.lock
+# poetry.toml
+# PDM
+# pdm.lock
+.pdm-python
+.pdm-build/
+# UV
+# uv.lock
+# Pixi
+# pixi.lock
+.pixi/
+
+# Logs
+*.log
+logs/
+src/Packages/CustomLogging/*.log
+
+# Packaging and Distribution
+*.egg
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+.installed.cfg
+MANIFEST
+certificate.*
+sign.*
+signtool.exe
+
+# Testing and Coverage
+.coverage
+.coverage.*
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+cover/
+
+# GUI and Image Artifacts
+*.ico
+*.png
+
+# IDE and Editor Files
+# .idea/
+# .vscode/
+.spyderproject
+.spyproject
+.ropeproject
+
+# OS-Specific Files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# PyPI Configuration
+.pypirc
+
+# Dev Branch Experimental Files
+dev_temp/
+*.bak
+debug_*.py
+*.tmp
 
 # Virtual Environments
 # Ignores virtual environment directories and env configs
