@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11"]
-      fail-fast: false  # Prevent cancellation of other jobs if one fails
+      fail-fast: false  # Allow all jobs to complete even if one fails
     steps:
     - uses: actions/checkout@v4
     
@@ -29,7 +29,7 @@ jobs:
     
     - name: Run tests with coverage
       run: |
-        # Check if tests/ directory exists, exit gracefully if empty
+        # Exit gracefully if tests/ directory is empty
         if [ ! -d "tests" ]; then echo "No tests found"; exit 0; fi
         pytest tests/ -v --cov=src --cov-report=xml
     
@@ -37,10 +37,20 @@ jobs:
       run: |
         flake8 src/ --max-line-length=88
     
+    - name: Install xvfb for GUI tests
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb
+        
+    - name: Run tests with coverage
+      run: |
+        if [ ! -d "tests" ]; then echo "No tests found"; exit 0; fi
+        xvfb-run pytest tests/ -v --cov=src --cov-report=xml
+
     - name: Upload coverage to Codecov
-      if: matrix.python-version == '3.11'  # Only upload for 3.11 to avoid duplicates
+      if: matrix.python-version == '3.11'  # Only upload for 3.11
       uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml
       env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}  # Optional: Set in repo Secrets
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}  # Optional
