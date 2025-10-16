@@ -5,3 +5,4 @@ pyautogui
 PySide6
 PyInstaller
 colorama
+requests
