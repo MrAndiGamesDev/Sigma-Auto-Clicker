@@ -43,7 +43,7 @@ jobs:
         flake8 src/ --max-line-length=88
     
     - name: Upload coverage to Codecov
-      if: matrix.python-version == '3.11'  # Only for 3.11
+      if: matrix.python-version == '3.11'
       uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml
