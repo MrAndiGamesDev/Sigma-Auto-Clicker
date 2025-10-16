@@ -37,3 +37,12 @@ jobs:
         # Exit gracefully if tests/ or src/ is missing
         if [ ! -d "tests" ] || [ ! -d "src" ]; then echo "Tests or src directory missing"; exit 0; fi
         xvfb-run pytest tests/ -v --cov=src --cov-report=xml
+    
+    - name: Upload coverage to Codecov
+      if: matrix.python-version == '3.11' && env.CODECOV_TOKEN != ''  # Only for 3.11, skip if token unset
+      uses: codecov/codecov-action@v4
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}  # Requires token in Secrets
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false  # Prevent CI failure if Codecov upload fails
