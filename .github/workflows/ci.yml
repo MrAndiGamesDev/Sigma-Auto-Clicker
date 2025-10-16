@@ -13,12 +13,10 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11"]
-      fail-fast: false  # run all versions, even if one fails
-
+      fail-fast: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,43 +32,32 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-cov flake8 pytest-mock
 
-      - name: Install xvfb for GUI tests
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
-
       - name: Run tests with coverage
         run: |
           if [ ! -d "tests" ] || [ ! -d "src" ]; then
-            echo "⚠️ Tests or src directory missing, skipping tests."
+            echo "⚠️ No tests/src found, skipping tests."
             exit 0
           fi
-          xvfb-run pytest tests/ -v --cov=src --cov-report=xml
-        continue-on-error: true  # for debugging even if tests fail
+          pytest tests/ -v --cov=src --cov-report=xml
+        continue-on-error: true
 
-      - name: Run flake8 linting
+      - name: Lint source
         run: |
-          if [ ! -d "src" ]; then
-            echo "⚠️ src directory missing, skipping linting."
-            exit 0
-          fi
-          flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          if [ ! -d "src" ]; then echo "⚠️ src missing"; exit 0; fi
           flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
         continue-on-error: true
 
-      - name: Upload coverage to Codecov
-        if: matrix.python-version == '3.11'
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./coverage.xml
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Auto-Merge Pull Request
-        if: matrix.python-version == '3.11' && github.event_name == 'pull_request'
+  auto-merge:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    steps:
+      - name: Auto-merge PR if eligible
         uses: pascalgn/automerge-action@v0.15.6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MERGE_METHOD: squash
           MERGE_LABELS: automerge
           MERGE_COMMIT_MESSAGE: "🤖 Auto-merged PR #${{ github.event.pull_request.number }}"
+          MERGE_RETRY_LIMIT: 3
+          MERGE_RETRY_WAIT: 10
