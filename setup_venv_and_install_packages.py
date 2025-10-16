@@ -10,7 +10,6 @@ logger = logging.getLogger()
 
 class VirtualEnvManager:
     """Manages creation, activation, and package installation for a virtual environment."""
-
     def __init__(self, venv_path: str, requirements_file: str = "requirements.txt"):
         """Initialize with virtual environment path and optional requirements file."""
         self.venv_path = Path(venv_path)

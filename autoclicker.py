@@ -55,7 +55,6 @@ class Config:
 
 class FileManager:
     """Handles file operations and persistence"""
-    
     @staticmethod
     def ensure_app_directory():
         """Create and configure app directory"""
@@ -114,7 +113,6 @@ class FileManager:
 
 class VersionManager:
     """Manages application versioning and updates"""
-    
     @staticmethod
     def load_local_version() -> Optional[str]:
         """Load version from local VERSION.txt or cached current version"""
@@ -337,8 +335,6 @@ class Styles:
         color = cls.COLOR_THEMES.get(theme, "#0a84ff")
         return f"QPushButton {{ background-color: {color}; color: white; border: none; border-radius: 6px; padding: 8px; font-weight: bold; }} QPushButton:hover {{ background-color: {color[:-2]}cc; }}"
 
-
-# [UIManager, SystemTrayManager, ClickerEngine, AutoClickerApp classes remain the same as in your original code]
 class UIManager:
     def __init__(self, parent):
         self.parent = parent
@@ -585,8 +581,8 @@ class AutoClickerApp(QMainWindow):
         self._setup_timers()
         self._setup_hotkeys()
         self.ui.set_update_logs()
-    
-    # [Rest of AutoClickerApp methods remain the same as in your original code]
+        self.update_theme()
+        
     def _init_ui(self):
         self.setWindowTitle(f"{Config.APP_NAME} v{self.current_version}")
         self.setFixedSize(640, 580)
