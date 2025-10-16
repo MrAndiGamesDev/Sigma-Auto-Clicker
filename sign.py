@@ -5,6 +5,7 @@ import subprocess
 import sys
 import urllib.request
 from pathlib import Path
+from time import sleep
 from typing import Generator, List, Tuple, Optional
 from src.Packages.CustomLogging import Logging
 
@@ -143,16 +144,22 @@ class WindowsSDKManager:
             self._log("error", f"Failed to manage SDK: {e}")
             return False
 
-def main():
+    def exit_script(self, duration, lvl=1):
+        """Exit the script with a message."""
+        self._log("info", "Exiting script.")
+        sleep(duration)
+        sys.exit(lvl)
+
+def run(duration):
     """Main entry point for the script."""
     try:
         sdk_manager = WindowsSDKManager()
         success = sdk_manager.manage_sdk()
         if not success:
-            sys.exit(1)
+            sdk_manager.exit_script(duration)
     except Exception as e:
         Logging.Log("error", f"Unexpected error in main: {e}")
-        sys.exit(1)
+        sdk_manager.exit_script(duration)
 
 if __name__ == "__main__":
-    main()
+    run(2)
