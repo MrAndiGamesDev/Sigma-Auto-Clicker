@@ -26,10 +26,8 @@ class Config:
     """Application configuration constants"""
     APP_NAME = "Sigma Auto Clicker"
     HOTKEY = "Ctrl+F"
-
     ICON_URL = "https://raw.githubusercontent.com/MrAndiGamesDev/My-App-Icons/main/mousepointer.ico"
-
-    GITHUB_REPO = "MrAndiGamesDev/SigmaAutoClicker"  # Update this to your actual repo
+    GITHUB_REPO = "MrAndiGamesDev/SigmaAutoClicker"
     UPDATE_CHECK_INTERVAL = 24 * 60 * 60 * 1000  # 24 hours in ms
     DEFAULT_VERSION = "1.0.0"
     
@@ -80,7 +78,6 @@ class FileManager:
                                  check=True, capture_output=True)
             except Exception as e:
                 print(f"Failed to download icon: {e}")
-                # Create a simple fallback icon path
                 Config.APP_ICON.touch()
         return str(Config.APP_ICON)
     
@@ -154,62 +151,79 @@ class VersionManager:
     
     @staticmethod
     def fetch_latest_release() -> Dict[str, Any]:
-        """Fetch latest release info from GitHub with fallback"""
+        """Fetch latest release info from GitHub API"""
         try:
             headers = {
                 'Accept': 'application/vnd.github.v3+json',
                 'User-Agent': Config.APP_NAME
             }
-            response = requests.get(
-                f"https://api.github.com/repos/{Config.GITHUB_REPO}/releases/latest",
-                headers=headers, timeout=10
-            )
+            url = f"https://api.github.com/repos/{Config.GITHUB_REPO}/releases/latest"
+            print(f"Fetching latest release from: {url}")  # Debug log
+            
+            response = requests.get(url, headers=headers, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
-                if 'tag_name' in data:
-                    version = data.get('tag_name', 'unknown').lstrip('v')
+                print(f"GitHub API response received: {data.get('tag_name', 'No tag')}")
+                
+                if 'tag_name' in data and data['tag_name']:
+                    version = data['tag_name'].lstrip('v')
                     return {
                         'version': version,
-                        'download_url': data.get('html_url', f"https://github.com/{Config.GITHUB_REPO}"),
+                        'download_url': data.get('html_url', f"https://github.com/{Config.GITHUB_REPO}/releases/latest"),
                         'release_notes': data.get('body', 'No release notes available'),
-                        'success': True
+                        'success': True,
+                        'assets': data.get('assets', [])
                     }
                 else:
-                    print("No tag_name in GitHub response")
+                    print("No tag_name found in response")
+                    
             elif response.status_code == 404:
                 print(f"Repository not found: {Config.GITHUB_REPO}")
             else:
-                print(f"GitHub API returned status {response.status_code}")
+                print(f"GitHub API error: HTTP {response.status_code} - {response.text[:200]}")
                 
         except requests.exceptions.RequestException as e:
             print(f"Network error fetching releases: {e}")
         except Exception as e:
             print(f"Unexpected error fetching releases: {e}")
         
-        # Fallback to a mock newer version for demo purposes
-        # In production, you might want to disable update checking or use a different service
+        # Fallback response
         return {
-            'version': '1.1.0',  # Mock version - replace with actual logic
+            'version': Config.DEFAULT_VERSION,
             'download_url': f"https://github.com/{Config.GITHUB_REPO}",
-            'release_notes': 'Update check temporarily unavailable. Please check GitHub manually.',
+            'release_notes': 'Unable to fetch latest release. Please check GitHub manually.',
             'success': False,
-            'error': 'Repository not found or network error'
+            'error': 'Failed to fetch from GitHub API'
         }
     
     @staticmethod
     def get_current_version() -> str:
         """Get the currently running version"""
+        # First try local VERSION.txt
         version = VersionManager.load_local_version()
         if version:
+            print(f"Using local version: {version}")
             return version
         
+        # Try cached latest version
         cached = VersionManager.get_cached_latest()
         if cached and cached != Config.DEFAULT_VERSION:
+            print(f"Using cached version: {cached}")
             FileManager.write_version_file(Config.VERSION_FILE, cached)
             return cached
         
-        # Don't fetch on startup to avoid delays - use default or local
+        # Fetch from GitHub if no local version found
+        print("No local version found, fetching from GitHub...")
+        release_info = VersionManager.fetch_latest_release()
+        if release_info.get('success') and release_info['version'] != Config.DEFAULT_VERSION:
+            version = release_info['version']
+            VersionManager.cache_latest_version(version)
+            FileManager.write_version_file(Config.VERSION_FILE, version)
+            print(f"Fetched and cached version: {version}")
+            return version
+        
+        print("Using default version")
         return Config.DEFAULT_VERSION
     
     @staticmethod
@@ -222,6 +236,7 @@ class VersionManager:
             return to_tuple(new) > to_tuple(current)
         except:
             return new > current
+
 
 class UpdateChecker(QThread):
     """Background thread for checking updates"""
@@ -237,22 +252,31 @@ class UpdateChecker(QThread):
     def run(self):
         """Execute update check"""
         try:
+            print("Starting update check...")
             release_info = VersionManager.fetch_latest_release()
             latest_version = release_info.get('version', self.current_version)
+            print(f"Latest version found: {latest_version}, Current: {self.current_version}")
+            
             self.version_fetched.emit(latest_version)
             
             if release_info.get('success', False):
                 if VersionManager.is_newer_version(latest_version, self.current_version):
+                    print(f"Update available: {latest_version} > {self.current_version}")
                     self.update_available.emit(release_info)
+                    self.check_completed.emit(True, f"Update available: v{latest_version}")
                 else:
+                    print("No update available")
                     self.check_completed.emit(True, f"You're up to date! (v{self.current_version})")
             else:
-                # Even if fetch failed, treat as up to date
-                self.check_completed.emit(True, "Update check unavailable - you're running the latest version")
+                self.check_completed.emit(True, "Update check unavailable - continuing with current version")
+                VersionManager.cache_latest_version(latest_version)
                 
         except Exception as e:
+            print(f"Update check error: {e}")
             self.check_completed.emit(False, f"Update check failed: {str(e)}")
 
+
+# [Rest of the classes remain the same: Styles, UIManager, SystemTrayManager, ClickerEngine, AutoClickerApp]
 class Styles:
     """UI styling management"""
     BASE_STYLES = {
@@ -312,17 +336,15 @@ class Styles:
         color = cls.COLOR_THEMES.get(theme, "#0a84ff")
         return f"QPushButton {{ background-color: {color}; color: white; border: none; border-radius: 6px; padding: 8px; font-weight: bold; }} QPushButton:hover {{ background-color: {color[:-2]}cc; }}"
 
+
+# [UIManager, SystemTrayManager, ClickerEngine, AutoClickerApp classes remain the same as in your original code]
 class UIManager:
-    """Manages UI components and styling"""
-    
     def __init__(self, parent):
         self.parent = parent
         self.widgets = {}
     
     def create_header(self) -> QWidget:
-        """Create application header with version display"""
         layout = QHBoxLayout()
-        
         header_label = QLabel(f"⚙️ {Config.APP_NAME}")
         header_label.setStyleSheet("font-size: 22px; font-weight: bold;")
         
@@ -342,7 +364,6 @@ class UIManager:
         return widget
     
     def create_click_settings(self) -> QGroupBox:
-        """Create click configuration group"""
         group = QGroupBox("🖱️ Click Settings")
         form = QFormLayout()
         
@@ -360,7 +381,6 @@ class UIManager:
         return group
     
     def create_theme_settings(self) -> QGroupBox:
-        """Create theme and appearance settings"""
         group = QGroupBox("🎨 Interface")
         form = QFormLayout()
         
@@ -383,7 +403,6 @@ class UIManager:
         return group
     
     def create_update_tab(self) -> QWidget:
-        """Create updates information tab"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         
@@ -407,7 +426,6 @@ class UIManager:
         return widget
     
     def update_version_display(self, current: str, latest: str = None):
-        """Update version information across UI"""
         if 'version_display' in self.widgets:
             self.widgets['version_display'].setText(f"v{current}")
         if 'current_version_label' in self.widgets:
@@ -419,26 +437,21 @@ class UIManager:
             self.parent.tray.tray_icon.setToolTip(f"{Config.APP_NAME} v{current}")
     
     def set_update_logs(self):
-        """Set update logs in UI"""
         if 'update_text' in self.widgets:
             logs = "\n\n".join(Config.UPDATE_LOGS)
             self.widgets['update_text'].setPlainText(logs)
 
 class SystemTrayManager:
-    """Manages system tray functionality"""
-    
     def __init__(self, parent):
         self.parent = parent
         self.tray_icon = None
         self.setup_tray()
     
     def setup_tray(self):
-        """Initialize system tray icon and menu"""
         try:
             icon_path = FileManager.download_icon()
             self.tray_icon = QSystemTrayIcon(QIcon(icon_path))
             self.update_tooltip()
-            
             menu = self.create_tray_menu()
             self.tray_icon.setContextMenu(menu)
             self.tray_icon.activated.connect(self.on_tray_activated)
@@ -448,14 +461,11 @@ class SystemTrayManager:
             print(f"Tray setup failed: {e}")
     
     def update_tooltip(self):
-        """Update tray icon tooltip"""
         if self.tray_icon:
             self.tray_icon.setToolTip(f"{Config.APP_NAME} v{self.parent.current_version}")
     
     def create_tray_menu(self) -> QMenu:
-        """Create system tray context menu"""
         menu = QMenu()
-        
         actions = [
             ("👁️ Show", self.parent.show_normal),
             ("▶️ Start/Stop", self.parent.toggle_clicking),
@@ -463,7 +473,6 @@ class SystemTrayManager:
             (None, None),
             ("❌ Quit", self.parent.quit_app)
         ]
-        
         for text, callback in actions:
             if text is None:
                 menu.addSeparator()
@@ -475,13 +484,11 @@ class SystemTrayManager:
         return menu
     
     def on_tray_activated(self, reason):
-        """Handle tray icon activation"""
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick or \
            reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.parent.show_normal()
     
     def show_minimize_notification(self):
-        """Show notification when minimizing to tray"""
         if self.tray_icon:
             self.tray_icon.showMessage(
                 Config.APP_NAME,
@@ -491,15 +498,12 @@ class SystemTrayManager:
             )
 
 class ClickerEngine:
-    """Core clicking functionality"""
-    
     def __init__(self, parent):
         self.parent = parent
         self.running = False
         self.thread = None
     
     def start(self):
-        """Start clicking sequence"""
         if self.running:
             return
         self.running = True
@@ -512,7 +516,6 @@ class ClickerEngine:
         self.parent.log("▶️ Started clicking")
     
     def stop(self):
-        """Stop clicking sequence"""
         self.running = False
         if hasattr(self.parent, 'start_btn'):
             self.parent.start_btn.setEnabled(True)
@@ -521,7 +524,6 @@ class ClickerEngine:
         self.parent.log("⏹️ Stopped clicking")
     
     def _click_loop(self):
-        """Main clicking loop"""
         try:
             settings = self._get_settings()
             cycle_count = 0
@@ -550,7 +552,6 @@ class ClickerEngine:
             self.stop()
     
     def _get_settings(self) -> Dict[str, Any]:
-        """Parse UI settings with defaults"""
         widgets = self.parent.ui.widgets
         return {
             'clicks': max(1, int(widgets.get('click_count', QLineEdit("1")).text() or 1)),
@@ -560,11 +561,10 @@ class ClickerEngine:
         }
 
 class AutoClickerApp(QMainWindow):
-    """Main application class"""
-    
     def __init__(self):
         super().__init__()
         self.current_version = VersionManager.get_current_version()
+        print(f"Application starting with version: {self.current_version}")
         self.latest_version = self.current_version
         self.update_checker = None
         
@@ -577,8 +577,8 @@ class AutoClickerApp(QMainWindow):
         self._setup_hotkeys()
         self.ui.set_update_logs()
     
+    # [Rest of AutoClickerApp methods remain the same as in your original code]
     def _init_ui(self):
-        """Initialize main UI"""
         self.setWindowTitle(f"{Config.APP_NAME} v{self.current_version}")
         self.setFixedSize(640, 580)
         self.setStyleSheet(Styles.get_base_style("Dark"))
@@ -596,7 +596,6 @@ class AutoClickerApp(QMainWindow):
         self.ui.update_version_display(self.current_version)
     
     def _setup_tabs(self, layout):
-        """Setup tab widget"""
         tabs = QTabWidget()
         
         settings_tab = QWidget()
@@ -620,7 +619,6 @@ class AutoClickerApp(QMainWindow):
         layout.addWidget(tabs)
     
     def _setup_controls(self, layout):
-        """Setup control buttons"""
         btn_layout = QHBoxLayout()
         
         self.start_btn = QPushButton(f"▶️ Start ({Config.HOTKEY})")
@@ -636,14 +634,12 @@ class AutoClickerApp(QMainWindow):
         layout.addLayout(btn_layout)
     
     def _setup_timers(self):
-        """Setup update checking timer"""
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.check_for_updates_silent)
         self.update_timer.start(Config.UPDATE_CHECK_INTERVAL)
-        QTimer.singleShot(3000, self.check_for_updates)  # Initial check after 3s
+        QTimer.singleShot(3000, self.check_for_updates)
     
     def _setup_hotkeys(self):
-        """Setup keyboard hotkeys"""
         try:
             keyboard.add_hotkey(Config.HOTKEY, self.toggle_clicking)
             print(f"Hotkey {Config.HOTKEY} registered")
@@ -651,14 +647,12 @@ class AutoClickerApp(QMainWindow):
             print(f"Failed to setup hotkey: {e}")
     
     def toggle_clicking(self):
-        """Toggle clicking state"""
         if self.clicker.running:
             self.clicker.stop()
         else:
             self.clicker.start()
     
     def check_for_updates(self, silent: bool = False):
-        """Check for updates"""
         if self.update_checker and self.update_checker.isRunning():
             return
         
@@ -672,18 +666,15 @@ class AutoClickerApp(QMainWindow):
         self.update_checker.start()
     
     def check_for_updates_silent(self):
-        """Silent update check"""
         self.check_for_updates(silent=True)
     
     def update_theme(self):
-        """Update application theme"""
         if 'appearance_combo' in self.ui.widgets:
             mode = self.ui.widgets['appearance_combo'].currentText()
             self.setStyleSheet(Styles.get_base_style(mode))
             self.update_color_theme()
     
     def update_color_theme(self):
-        """Update color theme"""
         if 'color_combo' in self.ui.widgets:
             theme = self.ui.widgets['color_combo'].currentText()
             style = Styles.get_button_style(theme)
@@ -691,7 +682,6 @@ class AutoClickerApp(QMainWindow):
                 self.start_btn.setStyleSheet(style)
     
     def log(self, message: str):
-        """Add message to activity log"""
         timestamp = time.strftime("%H:%M:%S")
         self.log_text.append(f"[{timestamp}] {message}")
         self.log_text.verticalScrollBar().setValue(
@@ -699,7 +689,6 @@ class AutoClickerApp(QMainWindow):
         )
     
     def _on_version_fetched(self, latest_version: str):
-        """Handle new version info"""
         self.latest_version = latest_version
         self.ui.update_version_display(self.current_version, self.latest_version)
         if 'last_check_label' in self.ui.widgets:
@@ -709,7 +698,6 @@ class AutoClickerApp(QMainWindow):
         FileManager.update_last_check()
     
     def _on_update_available(self, info: dict):
-        """Handle update available notification"""
         reply = QMessageBox.question(
             self, "Update Available",
             f"New version {info['version']} available!\n\n"
@@ -723,26 +711,22 @@ class AutoClickerApp(QMainWindow):
         self.log(f"🆕 Update available: v{info['version']}")
     
     def _on_check_completed(self, success: bool, message: str):
-        """Handle update check completion"""
         status = "✅" if success else "ℹ️"
         self.log(f"{status} {message}")
         FileManager.update_last_check()
     
     def show_normal(self):
-        """Show and activate window"""
         self.show()
         self.raise_()
         self.activateWindow()
     
     def closeEvent(self, event):
-        """Minimize to tray on close"""
         event.ignore()
         self.hide()
         if self.tray.tray_icon:
             self.tray.show_minimize_notification()
     
     def quit_app(self):
-        """Gracefully quit application"""
         self.log("👋 Shutting down...")
         if hasattr(self, 'update_timer'):
             self.update_timer.stop()
