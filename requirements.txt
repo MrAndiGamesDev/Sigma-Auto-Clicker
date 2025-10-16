@@ -6,3 +6,4 @@ customtkinter
 PyInstaller
 colorama
 requests
+pytest
