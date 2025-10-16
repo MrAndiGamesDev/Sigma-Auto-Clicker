@@ -1,15 +1,18 @@
 name: Auto Merge
 
 on:
-  pull_request:
-    branches: [ main, dev ]
-    types: [ opened, synchronize, reopened, ready_for_review ]
+  workflow_run:
+    workflows: ["CI"]  # Wait for CI workflow (which includes coverage)
+    types: [completed]
+    branches: [main, dev]
 
 jobs:
   auto-merge:
     runs-on: ubuntu-latest
-    needs: [ coverage ]  # Wait for coverage.yml
-    if: github.event.pull_request.draft == false && env.AUTO_MERGE_TOKEN != ''  # Skip if draft or token unset
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.pull_request.draft == false
     steps:
     - uses: actions/checkout@v4
     
@@ -18,5 +21,5 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN }}
         MERGE_METHOD: merge
-        MERGE_LABELS: ""  # Merge all PRs
+        MERGE_LABELS: "dev"  # Merge all PRs
         MERGE_DELETE_BRANCH: true
