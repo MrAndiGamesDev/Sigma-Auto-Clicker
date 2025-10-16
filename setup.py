@@ -27,6 +27,13 @@ class PyInstallerBuilder:
             else:
                 self.Logging("warning", f"'{folder}' directory not found — skipping.")
 
+    def load_version(self, path: str) -> None:
+        try:
+            with open(path, 'r') as file:
+                return file.read().strip()  # Read and remove any surrounding whitespace
+        except Exception as e:
+            pass
+
     def build_executable(self) -> None:
         """Build the executable using PyInstaller."""
         self.Logging("info", f"Building executable for '{self.script_file}'...")
@@ -35,6 +42,7 @@ class PyInstallerBuilder:
             pyinstaller_args = [
                 "--noconfirm",
                 "--onefile",
+                f"--name=Sigma Auto Clicker ({self.load_version("VERSION.txt")})",
                 "--windowed",
                 "--icon=src\\Assets\\icons\\mousepointer.ico",
                 "--optimize=2",
@@ -47,6 +55,12 @@ class PyInstallerBuilder:
         except Exception as e:
             self.Logging("error", f"PyInstaller build failed: {e}")
 
+    def exit_script(self, duration, lvl=1):
+        """Exit the script with a message."""
+        self.Logging("info", "Exiting script.")
+        sleep(duration)
+        sys.exit(lvl)
+
     def run(self) -> None:
         self.Logging("info", f"Building executable for '{self.script_file}'...")
         sleep(2)
@@ -55,6 +69,7 @@ class PyInstallerBuilder:
             self.build_executable()
         except Exception as e:
             self.Logging("error", f"An error occurred: {e}")
+            self.exit_script(2)
 
 if __name__ == "__main__":
     PyConverter = PyInstallerBuilder()
