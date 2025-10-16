@@ -51,3 +51,25 @@ jobs:
         MERGE_FAIL_ON_APPROVALS: false
         MERGE_FAIL_ON_UP_TO_DATE: false # New line added
         MERGE_FAIL_ON_DRAFT: false
+        MERGE_FAIL_ON_WIP: false
+        MERGE_FAIL_ON_EXCLUDE_LABELS: false
+        MERGE_FAIL_ON_ONLY_LABELS: false
+        MERGE_FAIL_ON_ONLY_AUTHOR: false
+        MERGE_FAIL_ON_ONLY_TEAM: false
+        MERGE_FAIL_ON_ONLY_MILESTONE: false
+        MERGE_FAIL_ON_SKIP_CI: false
+        MERGE_FAIL_ON_NO_MATCH: false
+        MERGE_FAIL_ON_UNEXPECTED_ERROR: true
+        MERGE_FAIL_ON_TIMEOUT: true
+        MERGE_FAIL_ON_UNKNOWN: true
+        MERGE_TIMEOUT: 300
+        MERGE_POLLING_INTERVAL: 15
+        MERGE_POLLING_TIMEOUT: 1800
+        MERGE_GITHUB_API_URL: "https://api.github.com"
+        MERGE_GITHUB_GRAPHQL_URL: "https://api.github.com/graphql"
+        MERGE_GITHUB_REST_URL: "https://api.github.com"
+        MERGE_GITHUB_ENTERPRISE: false
+        MERGE_GITHUB_ENTERPRISE_URL: ""
+        MERGE_GITHUB_ENTERPRISE_GRAPHQL_URL: ""
+        MERGE_GITHUB_ENTERPRISE_REST_URL: ""
+        MERGE_GITHUB_APP: false
