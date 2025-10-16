@@ -45,3 +45,20 @@ jobs:
         fail_ci_if_error: false
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    - name: Upload coverage to Codecov (no token)
+      if: matrix.python-version == '3.11' && env.CODECOV_TOKEN == ''
+      uses: codecov/codecov-action@v4 # Fix: Upload even without token
+      with:
+        fail_ci_if_error: false
+        flags: no-token
+        name: codecov-no-token
+        file: ./coverage.xml
+      env:
+        CODECOV_TOKEN: ''
+    - name: Upload coverage to Codecov (all versions)
+      if: matrix.python-version != '3.11'
+      uses: codecov/codecov-action@v4
+      with:
+        fail_ci_if_error: false
+        flags: other-versions
+        name: codecov-other-versions
