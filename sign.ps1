@@ -39,7 +39,7 @@ try {
     Write-Host "Valid until: $($cert.NotAfter)" -ForegroundColor Cyan
     
     # Export to PFX
-    $pswrd = ConvertTo-SecureString -String "2006" -Force -AsPlainText
+    $pswrd = ConvertTo-SecureString -String "" -Force -AsPlainText
     Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $pswrd
     
     Write-Host "Certificate exported to '$certPath'" -ForegroundColor Green

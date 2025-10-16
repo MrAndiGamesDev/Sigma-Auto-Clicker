@@ -3,7 +3,7 @@ REM ================================
 REM Configuration - edit these lines
 REM ================================
 SET PFX_FILE=certificate.pfx
-SET PFX_PASSWORD=2006
+SET PFX_PASSWORD=
 SET /P VERSION=<version.txt
 SET FILE_TO_SIGN=.\Sigma Auto Clicker (%VERSION%).exe
 SET TIMESTAMP_URL=http://timestamp.digicert.com
