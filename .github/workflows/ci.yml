@@ -51,3 +51,11 @@ jobs:
         file: ./coverage.xml
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}  # Optional
+
+    - name: Auto-Merge
+      if: matrix.python-version == '3.11'
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./auto-merge.xml
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}  # Optional
