@@ -750,26 +750,23 @@ class AutoClickerApp(QMainWindow):
 def main():
     """Application entry point"""
     FileManager.ensure_app_directory()
-
-    # Pre-download icon to ensure it's available
+    
+    # Create QApplication FIRST - required for QIcon/QPixmap
+    app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
+    
+    # Now download and set icon after QApplication is created
     try:
         icon_path = FileManager.download_icon()
         app_icon = QIcon(icon_path)
         if not app_icon.isNull():
-            print("Setting global application icon")
+            app.setWindowIcon(app_icon)
+            print(f"Global application icon set: {icon_path}")
+        else:
+            print("Warning: Loaded icon is null/invalid")
     except Exception as e:
         print(f"Could not set global app icon: {e}")
     
-    app = QApplication(sys.argv)
-    
-    # Set global window icon
-    try:
-        if 'app_icon' in locals() and not app_icon.isNull():
-            app.setWindowIcon(app_icon)
-    except:
-        pass
-    
-    app.setQuitOnLastWindowClosed(False)
     window = AutoClickerApp()
     window.show()
     sys.exit(app.exec())
