@@ -27,7 +27,7 @@ class Config:
     APP_NAME = "Sigma Auto Clicker"
     HOTKEY = "Ctrl+F"
     ICON_URL = "https://raw.githubusercontent.com/MrAndiGamesDev/My-App-Icons/main/mousepointer.ico"
-    GITHUB_REPO = "MrAndiGamesDev/SigmaAutoClicker"
+    GITHUB_REPO = "MrAndiGamesDev/Sigma-Auto-Clicker"
     UPDATE_CHECK_INTERVAL = 24 * 60 * 60 * 1000  # 24 hours in ms
     DEFAULT_VERSION = "1.0.0"
     
@@ -347,6 +347,14 @@ class UIManager:
     def create_header(self) -> QWidget:
         layout = QHBoxLayout()
         header_label = QLabel(f"⚙️ {Config.APP_NAME}")
+
+        try:
+            icon_path = FileManager.download_icon()
+            self.setWindowIcon(QIcon(icon_path))
+            print(f"Window icon set: {icon_path}")
+        except Exception as e:
+            print(f"Failed to set window icon: {e}")
+
         header_label.setStyleSheet("font-size: 22px; font-weight: bold;")
         
         self.widgets['version_display'] = QLabel(f"v{self.parent.current_version}")
@@ -742,7 +750,25 @@ class AutoClickerApp(QMainWindow):
 def main():
     """Application entry point"""
     FileManager.ensure_app_directory()
+
+    # Pre-download icon to ensure it's available
+    try:
+        icon_path = FileManager.download_icon()
+        app_icon = QIcon(icon_path)
+        if not app_icon.isNull():
+            print("Setting global application icon")
+    except Exception as e:
+        print(f"Could not set global app icon: {e}")
+    
     app = QApplication(sys.argv)
+    
+    # Set global window icon
+    try:
+        if 'app_icon' in locals() and not app_icon.isNull():
+            app.setWindowIcon(app_icon)
+    except:
+        pass
+    
     app.setQuitOnLastWindowClosed(False)
     window = AutoClickerApp()
     window.show()
