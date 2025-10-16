@@ -37,13 +37,21 @@ jobs:
         # Exit gracefully if tests/ or src/ is missing
         if [ ! -d "tests" ] || [ ! -d "src" ]; then echo "Tests or src directory missing"; exit 0; fi
         xvfb-run pytest tests/ -v --cov=src --cov-report=xml    
-      continue-on-error: true  # Continue even if tests fail for debugging
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results-${{ matrix.python-version }}
+        
     - name: Run flake8 linting
       run: |
         # Exit gracefully if src/ is missing
         if [ ! -d "src" ]; then echo "src directory missing"; exit 0; fi
         flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
         flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      continue-on-error: true  # Continue even if linting fails for debugging
+
     - name: Upload coverage to Codecov
       if: matrix.python-version == '3.11'
       uses: codecov/codecov-action@v4
@@ -51,8 +59,15 @@ jobs:
         file: ./coverage.xml
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}  # Optional
+
     - name: Auto-Merge
       if: matrix.python-version == '3.11'
       uses: codecov/codecov-action@v4
       with:
         file: ./auto-merge.xml
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}  # Optional
+        
+    - name: Upload coverage to Codecov
+      if: matrix.python-version == '3.11'
+      uses: codecov/codecov-action@v4
