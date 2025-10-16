@@ -16,12 +16,11 @@ from PySide6.QtWidgets import (
     QComboBox, QSystemTrayIcon, QMenu, QFormLayout, QMessageBox, QProgressBar
 )
 from PySide6.QtGui import QIcon, QAction
-from PySide6.QtCore import Qt, QTimer, QEvent, QThread, pyqtSignal
+from PySide6.QtCore import Qt, QTimer, QEvent, QThread, Signal as pyqtSignal
 
 # ======================
 # HELPERS
 # ======================
-
 def path_exists(pathname: str):
     return os.path.exists(pathname)
 
