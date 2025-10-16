@@ -25,7 +25,7 @@ pyautogui.FAILSAFE = False
 class Config:
     """Application configuration constants"""
     APP_NAME = "Sigma Auto Clicker"
-    HOTKEY = "F3"
+    HOTKEY = "Ctrl+F"
 
     ICON_URL = "https://raw.githubusercontent.com/MrAndiGamesDev/My-App-Icons/main/mousepointer.ico"
 
@@ -47,6 +47,7 @@ class Config:
     VERSION_CACHE_FILE = APPDATA_DIR / "version_cache.txt"
     
     UPDATE_LOGS = [
+        "2025-10-16: Fixed An Update Management Bug and much more!",
         "2025-10-16: Added automatic update checking Version management UI/Code improvements UI Improvements And Much More!",
         "2025-10-15: Fixed Light Mode support and UI improvements",
         "2025-10-14: Added Update Logs tab and color themes",
