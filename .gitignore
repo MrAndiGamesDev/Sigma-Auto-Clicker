@@ -1,14 +1,50 @@
-# Byte-compiled / optimized / DLL files
+# Python Bytecode and Optimized Files
 __pycache__/
 *.py[cod]
 *$py.class
 *.pyd
 *.so
 
-# Distribution / packaging
-.Python
+# PyInstaller Artifacts
 build/
 dist/
+*.spec
+*.manifest
+Sigma-Auto-Clicker.exe
+AutoClickerPy/
+
+# Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.env
+.envrc
+
+# Dependency Management (uncomment the tool you use)
+# Pipenv
+# Pipfile.lock
+# Poetry
+# poetry.lock
+# poetry.toml
+# PDM
+# pdm.lock
+.pdm-python
+.pdm-build/
+# UV
+# uv.lock
+# Pixi
+# pixi.lock
+.pixi/
+
+# Logs
+*.log
+logs/
+src/Packages/CustomLogging/*.log
+
+# Packaging and Distribution
 *.egg
 *.egg-info/
 .eggs/
@@ -19,94 +55,37 @@ certificate.*
 sign.*
 signtool.exe
 
-# PyInstaller artifacts
-*.manifest
-*.spec
-AutoClickerPy/
-Sigma-Auto-Clicker.exe
-
-# Installation logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
+# Testing and Coverage
+.coverage
+.coverage.*
+.pytest_cache/
 htmlcov/
 .tox/
 .nox/
-.coverage
-.coverage.*
-.cache
-.pytest_cache/
-.hypothesis/
 nosetests.xml
 coverage.xml
 *.cover
-*.py.cover
+.hypothesis/
 cover/
 
-# Virtual environments
-.env
-.envrc
-.venv/
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+# GUI and Image Artifacts
+*.ico  # Temporary icon files
+*.png  # Temporary image files for PIL/CustomTkinter
 
-# Dependency management
-# Pipenv (uncomment if used)
-# Pipfile.lock
-
-# Poetry (uncomment if used)
-# poetry.lock
-# poetry.toml
-
-# PDM (uncomment if used)
-# pdm.lock
-pdm.toml
-.pdm-python
-.pdm-build/
-
-# UV (uncomment if used)
-# uv.lock
-
-# Pixi (uncomment if used)
-# pixi.lock
-.pixi/
-
-# IDEs and Editors
+# IDE and Editor Files
 # PyCharm (uncomment if used)
 # .idea/
-
-# Visual Studio Code (uncomment if used)
+# VS Code (uncomment if used)
 # .vscode/
-
-# Spyder
 .spyderproject
 .spyproject
+.ropeproject
 
-# System tray / packaging artifacts
-*.ico  # If temporary icon files are generated
-*.png  # If temporary image files are generated
-
-# CustomTkinter / GUI-related temporary files
-*.pyc
-*.pyo
-
-# OS-specific files
+# OS-Specific Files
 .DS_Store
 Thumbs.db
 *.swp
 *.swo
 
-# Logs and runtime files
-*.log
-debug.log
-error.log
-
-# PyPI configuration
+# PyPI Configuration
 .pypirc
-
-# Project-specific temporary files
-src/Packages/CustomLogging/*.log
