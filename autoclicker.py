@@ -306,7 +306,14 @@ class AutoClickerApp(QMainWindow):
         # Add update button to header
         update_btn = QPushButton("🔄 Check Updates")
         update_btn.clicked.connect(lambda: self.check_for_updates(silent=False))
-        update_btn.setStyleSheet("font-size: 12px; padding: 5px; border-radius: 4px;")
+        update_btn.setStyleSheet("""
+            font-size: 15px;
+            font-weight: bold;
+            border: 1px solid #444;
+            border-radius: 5px;
+            padding: 5px;
+        """)
+        
         header_layout = QHBoxLayout()
         header_layout.addWidget(self.header)
         header_layout.addStretch()
@@ -406,7 +413,8 @@ class AutoClickerApp(QMainWindow):
         self.update_text = QTextEdit()
         self.update_text.setReadOnly(True)
         self.update_text.setStyleSheet("""
-            font-size: 12px;
+            font-size: 15px;
+            font-weight: bold;
             border: 1px solid #444;
             border-radius: 5px;
             padding: 5px;
@@ -415,7 +423,7 @@ class AutoClickerApp(QMainWindow):
         layout.addWidget(self.update_text)
 
         self.set_update_logs([
-            "2025-10-16:\n- Added automatic update checking\n- Version comparison system\n- Update notifications\n- Bug fixes!",
+            "2025-10-16:\n- Added automatic update checking\n- Version comparison system\n- Update notifications\n- Bug fixes!\n- And Much More!",
             "2025-10-15:\n- Fixed Light Mode Support in tabs/tabs btns and infoframes\n- UI Improvements\n- And Much More!",
             "2025-10-14:\n- Added Update Logs tab and color themes.\n- Removed notification during minimize\n- Bug Fixes\n- And Much More!",
             "2025-10-13:\n- Initial release of Sigma Auto Clicker."
