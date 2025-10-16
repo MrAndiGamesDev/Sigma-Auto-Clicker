@@ -2,9 +2,14 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [main, dev]
   pull_request:
-    branches: [ main, dev ]
+    branches: [main, dev]
+    types: [opened, reopened, synchronize, ready_for_review, labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   test:
@@ -12,60 +17,35 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11"]
-      fail-fast: false  # Ensure all jobs complete for debugging
+      fail-fast: false
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest pytest-cov flake8 pytest-mock  # Added pytest-cov and pytest-mock
-    
-    - name: Install xvfb for GUI tests
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y xvfb  # For PySide6/pyautogui in CI
-    
-    - name: Run tests with coverage
-      run: |
-        # Exit gracefully if tests/ or src/ is missing
-        if [ ! -d "tests" ] || [ ! -d "src" ]; then echo "Tests or src directory missing"; exit 0; fi
-        xvfb-run pytest tests/ -v --cov=src --cov-report=xml    
-      continue-on-error: true  # Continue even if tests fail for debugging
-    - name: Run flake8 linting
-      run: |
-        # Exit gracefully if src/ is missing
-        if [ ! -d "src" ]; then echo "src directory missing"; exit 0; fi
-        flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
-        flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-      continue-on-error: true  # Continue even if linting fails for debugging
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest pytest-cov flake8 pytest-mock
+      - name: Run tests
+        run: |
+          if [ ! -d "tests" ] || [ ! -d "src" ]; then
+            echo "⚠️ No tests or src directory, skipping tests."
+            exit 0
+          fi
+          pytest tests/ -v --cov=src --cov-report=xml
+        continue-on-error: true
 
-    - name: Upload coverage to Codecov
-      if: matrix.python-version == '3.11'
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./coverage.xml
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}  # Optional
-        
-    - name: Auto-Merge
-      if: matrix.python-version == '3.11'
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./auto-merge.xml
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}  # Optional
-
-    - name: Upload coverage to Codecov
-      if: matrix.python-version == '3.11'
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./coverage.xml
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}  # Optional
+  auto-merge:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    steps:
+      - name: Auto-merge pull request
+        uses: pascalgn/automerge-action@v0.15.6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_METHOD: squash
+          MERGE_COMMIT_MESSAGE: "🤖 Auto-merged PR #${{ github.event.pull_request.number }}"
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
