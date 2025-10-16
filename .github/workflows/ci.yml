@@ -2,70 +2,75 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [main, dev]
   pull_request:
-    branches: [ main, dev ]
+    branches: [main, dev]
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   test:
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11"]
-      fail-fast: false  # Ensure all jobs complete for debugging
+      fail-fast: false  # run all versions, even if one fails
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest pytest-cov flake8 pytest-mock  # Added pytest-cov and pytest-mock
-    
-    - name: Install xvfb for GUI tests
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y xvfb  # For PySide6/pyautogui in CI
-    
-    - name: Run tests with coverage
-      run: |
-        # Exit gracefully if tests/ or src/ is missing
-        if [ ! -d "tests" ] || [ ! -d "src" ]; then echo "Tests or src directory missing"; exit 0; fi
-        xvfb-run pytest tests/ -v --cov=src --cov-report=xml    
-      continue-on-error: true  # Continue even if tests fail for debugging
-    - name: Run flake8 linting
-      run: |
-        # Exit gracefully if src/ is missing
-        if [ ! -d "src" ]; then echo "src directory missing"; exit 0; fi
-        flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
-        flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-      continue-on-error: true  # Continue even if linting fails for debugging
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Upload coverage to Codecov
-      if: matrix.python-version == '3.11'
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./coverage.xml
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}  # Optional
-        
-    - name: Auto-Merge
-      if: matrix.python-version == '3.11'
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./auto-merge.xml
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}  # Optional
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Upload coverage to Codecov
-      if: matrix.python-version == '3.11'
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./coverage.xml
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}  # Optional
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov flake8 pytest-mock
+
+      - name: Install xvfb for GUI tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      - name: Run tests with coverage
+        run: |
+          if [ ! -d "tests" ] || [ ! -d "src" ]; then
+            echo "⚠️ Tests or src directory missing, skipping tests."
+            exit 0
+          fi
+          xvfb-run pytest tests/ -v --cov=src --cov-report=xml
+        continue-on-error: true  # for debugging even if tests fail
+
+      - name: Run flake8 linting
+        run: |
+          if [ ! -d "src" ]; then
+            echo "⚠️ src directory missing, skipping linting."
+            exit 0
+          fi
+          flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        continue-on-error: true
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.11'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Auto-Merge Pull Request
+        if: matrix.python-version == '3.11' && github.event_name == 'pull_request'
+        uses: pascalgn/automerge-action@v0.15.6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_METHOD: squash
+          MERGE_LABELS: automerge
+          MERGE_COMMIT_MESSAGE: "🤖 Auto-merged PR #${{ github.event.pull_request.number }}"
