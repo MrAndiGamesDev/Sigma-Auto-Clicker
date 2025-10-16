@@ -211,3 +211,94 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+# Python Bytecode and Optimized Files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+*.so
+
+# PyInstaller Artifacts
+build/
+dist/
+*.spec
+*.manifest
+Sigma-Auto-Clicker.exe
+AutoClickerPy/
+
+# Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.env
+.envrc
+
+# Dependency Management (uncomment the tool you use)
+# Pipenv
+# Pipfile.lock
+# Poetry
+# poetry.lock
+# poetry.toml
+# PDM
+# pdm.lock
+.pdm-python
+.pdm-build/
+# UV
+# uv.lock
+# Pixi
+# pixi.lock
+.pixi/
+
+# Logs
+*.log
+logs/
+src/Packages/CustomLogging/*.log
+
+# Packaging and Distribution
+*.egg
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+.installed.cfg
+MANIFEST
+certificate.*
+sign.*
+signtool.exe
+
+# Testing and Coverage
+.coverage
+.coverage.*
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+cover/
+
+# GUI and Image Artifacts
+*.ico  # Temporary icon files
+*.png  # Temporary image files for PIL/CustomTkinter
+
+# IDE and Editor Files
+# PyCharm (uncomment if used)
+# .idea/
+# VS Code (uncomment if used)
+# .vscode/
+.spyderproject
+.spyproject
+.ropeproject
+
+# OS-Specific Files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# PyPI Configuration
+.pypirc
