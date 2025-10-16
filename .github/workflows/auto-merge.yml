@@ -23,3 +23,5 @@ jobs:
         MERGE_DELETE_BRANCH: true
         MERGE_REQUIRED_APPROVALS: 0
         MERGE_COMMIT_MESSAGE: "pull-request-title-and-description"
+        MERGE_RETRY_COUNT: 3
+        MERGE_RETRY_WAIT: 10
