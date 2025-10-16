@@ -397,10 +397,10 @@ class AutoClickerApp(QMainWindow):
         self.update_progress.setVisible(False)
         layout.addWidget(self.update_progress)
 
-        # Manual check button
-        check_btn = QPushButton("🔍 Check for Updates Now")
-        check_btn.clicked.connect(lambda: self.check_for_updates(silent=False))
-        layout.addWidget(check_btn)
+        # # Manual check button (commented just incase)
+        # check_btn = QPushButton("🔍 Check for Updates Now")
+        # check_btn.clicked.connect(lambda: self.check_for_updates(silent=False))
+        # layout.addWidget(check_btn)
 
         # Update log
         self.update_text = QTextEdit()
