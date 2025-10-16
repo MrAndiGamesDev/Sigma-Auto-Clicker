@@ -1,75 +1,24 @@
 name: Auto Merge
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
-    branches: [main, master]
-  check_suite:
-    types: [completed]
+  pull_request:
+    types: [labeled, unlabeled, opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   auto-merge:
     runs-on: ubuntu-latest
-    if: >
-      github.event.pull_request.draft == false
     steps:
-    - name: Auto-merge PR
-      uses: pascalgn/automerge-action@v0.16.4
-      env:
-        GITHUB_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN }}
-        MERGE_METHOD: merge
-        MERGE_LABELS: ""
-        MERGE_REMOVE_LABELS: ""
-        MERGE_DELETE_BRANCH: true
-        MERGE_REQUIRED_APPROVALS: 0
-        MERGE_COMMIT_MESSAGE: "pull-request-title-and-description"
-        MERGE_RETRY_COUNT: 3
-        MERGE_RETRY_WAIT: 10
-        MERGE_ALLOW_SQUASH: false
-        MERGE_ALLOW_REBASE: false
-        MERGE_ALLOW_MERGE: true
-        MERGE_REQUIRE_ALL_CHECKS: true
-        MERGE_REQUIRE_SUCCESSFUL_CHECKS: true
-        MERGE_REQUIRE_UP_TO_DATE: true
-        MERGE_REQUIRE_NO_CONFLICTS: true
-        MERGE_REQUIRE_APPROVALS_BEFORE_CHECKS: false
-        MERGE_EXCLUDE_DRAFTS: true
-        MERGE_EXCLUDE_WIP: true
-        MERGE_EXCLUDE_LABELS: "do not merge, wip"
-        MERGE_ONLY_LABELS: ""
-        MERGE_ONLY_AUTHOR: ""
-        MERGE_ONLY_TEAM: ""
-        MERGE_ONLY_MILESTONE: ""
-        MERGE_SKIP_CI: false
-        MERGE_SKIP_CI_PHRASE: "[skip ci]"
-        MERGE_DEBUG: false
-        MERGE_VERBOSE: false
-        MERGE_FAIL_ON_ERROR: true
-        MERGE_FAIL_ON_NON_EXISTING: false
-        MERGE_FAIL_ON_CONFLICTS: false
-        MERGE_FAIL_ON_CHECKS: false
-        MERGE_FAIL_ON_APPROVALS: false
-        MERGE_FAIL_ON_UP_TO_DATE: false # New line added
-        MERGE_FAIL_ON_DRAFT: false
-        MERGE_FAIL_ON_WIP: false
-        MERGE_FAIL_ON_EXCLUDE_LABELS: false
-        MERGE_FAIL_ON_ONLY_LABELS: false
-        MERGE_FAIL_ON_ONLY_AUTHOR: false
-        MERGE_FAIL_ON_ONLY_TEAM: false
-        MERGE_FAIL_ON_ONLY_MILESTONE: false
-        MERGE_FAIL_ON_SKIP_CI: false
-        MERGE_FAIL_ON_NO_MATCH: false
-        MERGE_FAIL_ON_UNEXPECTED_ERROR: true
-        MERGE_FAIL_ON_TIMEOUT: true
-        MERGE_FAIL_ON_UNKNOWN: true
-        MERGE_TIMEOUT: 300
-        MERGE_POLLING_INTERVAL: 15
-        MERGE_POLLING_TIMEOUT: 1800
-        MERGE_GITHUB_API_URL: "https://api.github.com"
-        MERGE_GITHUB_GRAPHQL_URL: "https://api.github.com/graphql"
-        MERGE_GITHUB_REST_URL: "https://api.github.com"
-        MERGE_GITHUB_ENTERPRISE: false
-        MERGE_GITHUB_ENTERPRISE_URL: ""
-        MERGE_GITHUB_ENTERPRISE_GRAPHQL_URL: ""
-        MERGE_GITHUB_ENTERPRISE_REST_URL: ""
-        MERGE_GITHUB_APP: false
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Auto merge if labeled
+        uses: pascalgn/automerge-action@v0.15.6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_METHOD: squash # or 'merge' or 'rebase'
+          MERGE_LABELS: "automerge"
+          MERGE_COMMIT_MESSAGE: "Auto merged PR #{{ pullRequest.number }}"
