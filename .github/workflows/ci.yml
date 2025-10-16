@@ -18,22 +18,15 @@ jobs:
       matrix:
         python-version: ["3.9", "3.10", "3.11"]
       fail-fast: false
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-cov flake8 pytest-mock
-
+          pip install -r requirements.txt pytest pytest-cov flake8 pytest-mock
       - name: Run tests
         run: |
           if [ ! -d "tests" ] || [ ! -d "src" ]; then
@@ -46,9 +39,7 @@ jobs:
   auto-merge:
     needs: test
     runs-on: ubuntu-latest
-    if: >
-      (github.event_name == 'pull_request' || github.event_name == 'push') &&
-      github.event.pull_request.draft == false
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
     steps:
       - name: Auto-merge pull request
         uses: pascalgn/automerge-action@v0.15.6
@@ -56,3 +47,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MERGE_METHOD: squash
           MERGE_COMMIT_MESSAGE: "🤖 Auto-merged PR #${{ github.event.pull_request.number }}"
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
