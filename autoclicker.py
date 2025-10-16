@@ -74,8 +74,10 @@ class FileManager:
             try:
                 urllib.request.urlretrieve(Config.ICON_URL, Config.APP_ICON)
                 if Config.SYSTEM == "Windows":
-                    subprocess.run(["attrib", "+H", str(Config.APP_ICON)], 
-                                 check=True, capture_output=True)
+                    subprocess.run(
+                        ["attrib", "+H", str(Config.APP_ICON)], 
+                        check=True, capture_output=True
+                    )
             except Exception as e:
                 print(f"Failed to download icon: {e}")
                 Config.APP_ICON.touch()
@@ -236,10 +238,8 @@ class VersionManager:
         except:
             return new > current
 
-
 class UpdateChecker(QThread):
     """Background thread for checking updates"""
-    
     update_available = pyqtSignal(dict)
     check_completed = pyqtSignal(bool, str)
     version_fetched = pyqtSignal(str)
@@ -274,8 +274,6 @@ class UpdateChecker(QThread):
             print(f"Update check error: {e}")
             self.check_completed.emit(False, f"Update check failed: {str(e)}")
 
-
-# [Rest of the classes remain the same: Styles, UIManager, SystemTrayManager, ClickerEngine, AutoClickerApp]
 class Styles:
     """UI styling management"""
     BASE_STYLES = {
