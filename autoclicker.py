@@ -1112,7 +1112,7 @@ class AutoClickerApp(QMainWindow):
         self.update_theme()
     
     def _init_ui(self):
-        self.setWindowTitle(f"{Config.APP_NAME} v{self.current_version}")
+        self.setWindowTitle(f"{Config.APP_NAME} (v{self.current_version})")
         self.setFixedSize(640, 580)
         self.setStyleSheet(Styles.get_base_style(self.current_appearance))
         
