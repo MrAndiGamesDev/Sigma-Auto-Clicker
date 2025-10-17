@@ -18,9 +18,9 @@ from typing import Optional, Dict, Any, Callable
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QLineEdit, QPushButton,
     QTabWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTextEdit, QFileDialog,
-    QComboBox, QSystemTrayIcon, QMenu, QFormLayout, QMessageBox
+    QComboBox, QSystemTrayIcon, QMenu, QFormLayout, QMessageBox, QDialog, QDialogButtonBox
 )
-from PySide6.QtGui import QIcon, QAction, QColor
+from PySide6.QtGui import QIcon, QAction, QColor, QFont
 from PySide6.QtCore import Qt, QTimer, QThread, Signal as pyqtSignal, QObject
 
 # PyAutoGUI settings
@@ -36,6 +36,7 @@ class Config:
     GITHUB_REPO = f"{AUTHORNAME}/Sigma-Auto-Clicker"
     UPDATE_CHECK_INTERVAL = 24 * 60 * 60 * 1000
     DEFAULT_VERSION = "1.0.0"
+    LOCK_PORT = 49513
 
     PORTS = "127.0.0.1"
 
@@ -52,9 +53,10 @@ class Config:
     UPDATE_CHECK_FILE = APPDATA_DIR / "last_update_check.txt"
     VERSION_FILE = APPDATA_DIR / "current_version.txt"
     VERSION_CACHE_FILE = APPDATA_DIR / "version_cache.txt"
+    LOCK_FILE = APPDATA_DIR / f"app.lock.{LOCK_PORT}"
     
     UPDATE_LOGS = [
-        "2025-10-18: UI Improvements and Bug Fixes and much more!",
+        "2025-10-17: UI Improvements and Bug Fixes and much more!",
         "2025-10-16: Fixed app bugs! and much more (part 3)",
         "2025-10-16: Fixed An Update Management Bug and much more! (part 2)",
         "2025-10-16: Added automatic update checking Version management UI/Code improvements UI Improvements And Much More!",
@@ -163,7 +165,6 @@ class OSCompatibilityChecker:
         try:
             if system == "Windows":
                 # Windows version check using win32api or platform
-                import sys
                 if hasattr(sys, 'getwindowsversion'):
                     win_ver = sys.getwindowsversion()
                     major = win_ver.major
@@ -303,130 +304,96 @@ class OSCompatibilityChecker:
             if reply == QMessageBox.Cancel:
                 sys.exit(1)
 
+class InstanceDialog(QDialog):
+    """Custom dialog for handling multiple instance detection"""
+    
+    def __init__(self, lockfile_path: Path, parent=None):
+        super().__init__(parent)
+        self.lockfile_path = lockfile_path
+        self.setWindowTitle(f"{Config.APP_NAME} - Instance Detected")
+        self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint | Qt.WindowCloseButtonHint)
+        self.setModal(True)
+        self.setFixedSize(500, 200)
+        
+        self._setup_ui()
+    
+    def _setup_ui(self):
+        layout = QVBoxLayout()
+        
+        # Icon and title
+        header_layout = QHBoxLayout()
+        icon_label = QLabel("🖱️")
+        icon_label.setFont(QFont("Segoe UI Emoji", 24))
+        title_label = QLabel(f"{Config.APP_NAME} is already running!")
+        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #d32f2f; margin-left: 10px;")
+        
+        header_layout.addWidget(icon_label)
+        header_layout.addWidget(title_label)
+        layout.addLayout(header_layout)
+        
+        # Message
+        message = QLabel("An instance of the application is already active.\n\nWhat would you like to do?")
+        message.setWordWrap(True)
+        message.setStyleSheet("font-size: 12px; color: #333; padding: 15px; background-color: #f5f5f5; border-radius: 5px;")
+        layout.addWidget(message)
+        
+        # Buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.Yes | QDialogButtonBox.No | QDialogButtonBox.Ignore)
+        button_box.setOrientation(Qt.Horizontal)
+        button_box.yesButton().setText("👁️ Bring to Front")
+        button_box.noButton().setText("🚪 Exit")
+        button_box.button(QDialogButtonBox.Ignore).setText("⚠️ Force New Instance")
+        
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        button_box.button(QDialogButtonBox.Ignore).clicked.connect(self._force_new)
+        
+        layout.addWidget(button_box)
+        self.setLayout(layout)
+    
+    def _force_new(self):
+        """Handle force new instance"""
+        reply = QMessageBox.warning(
+            self, "Warning", 
+            "Running multiple instances may cause conflicts and instability!\n\nContinue anyway?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self.done(2)  # Custom code for force new
+
 class SingletonLock(QObject):
-    """Manages singleton application lock using TCP socket on localhost"""
+    """Enhanced singleton manager with proper cleanup and activation"""
     activation_requested = pyqtSignal()
     
-    def __init__(self, lock_port: int = 49513):
+    def __init__(self, lock_port: int = Config.LOCK_PORT):
         super().__init__()
         self.lock_port = lock_port
         self.socket = None
         self.listener_thread = None
-        self.lockfile_path = Config.APPDATA_DIR / f"app.lock.{lock_port}"
+        self.lockfile_path = Config.LOCK_FILE
         self._running = True
     
-    @contextmanager
-    def acquire(self):
-        """Context manager to acquire and release lock"""
-        sock = self._try_acquire()
-        if sock is None:
-            yield None  # Another instance running
-            return
-        try:
+    def acquire_lock(self):
+        """Acquire singleton lock with stale cleanup"""
+        self._cleanup_stale_locks()
+        
+        # Try to connect to existing instance first
+        existing_port = self._read_port_file()
+        if existing_port and self._try_connect_to_existing(existing_port):
+            return None  # Existing instance found
+        
+        # Try to create new lock
+        sock = self._create_lock()
+        if sock:
             self.socket = sock
             self._write_port_file()
             self._start_listener()
-            yield sock  # Lock acquired successfully
-        finally:
-            self._release()
-    
-    def _try_acquire(self) -> Optional[socket.socket]:
-        """Attempt to acquire lock or detect existing instance"""
-        # First check if lockfile exists with a port
-        port = self._read_port_file()
-        if port:
-            if self._try_connect_to_existing(port):
-                return None  # Existing instance found
-        # Try to bind to port directly (will fail if another instance is using it)
-        return self._create_lock()
-    
-    def _try_connect_to_existing(self, port: int) -> bool:
-        """Try to connect to existing instance on given port"""
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(0.1)
-            sock.connect((Config.PORTS, port))
-            sock.close()
-            return True
-        except (ConnectionRefusedError, socket.timeout, OSError):
-            return False
-    
-    def _create_lock(self) -> Optional[socket.socket]:
-        """Create new lock socket on localhost"""
-        sock = None
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind((Config.PORTS, self.lock_port))
-            sock.listen(5)
             return sock
-        except OSError as e:
-            if "Address already in use" in str(e):
-                print(f"Port {self.lock_port} already in use, another instance may be running")
-            else:
-                print(f"Failed to create lock socket: {e}")
-            if sock:
-                sock.close()
-            return None
-    
-    def _write_port_file(self):
-        """Write the port number to lockfile"""
-        try:
-            FileManager.ensure_app_directory()
-            self.lockfile_path.write_text(str(self.lock_port))
-            # Hide on Windows
-            if Config.SYSTEM == "Windows":
-                try:
-                    subprocess.run(
-                        ["attrib", "+H", str(self.lockfile_path)], 
-                        capture_output=True,
-                        check=True
-                    )
-                except subprocess.CalledProcessError:
-                    pass
-        except Exception as e:
-            print(f"Failed to write port file: {e}")
-    
-    def _read_port_file(self) -> Optional[int]:
-        """Read port number from lockfile"""
-        try:
-            if self.lockfile_path.exists():
-                port_str = self.lockfile_path.read_text().strip()
-                port = int(port_str)
-                return port
-        except (ValueError, OSError):
-            # Cleanup invalid lockfile
-            try:
-                self.lockfile_path.unlink()
-            except:
-                pass
         return None
     
-    def _start_listener(self):
-        """Start background thread to listen for activation requests"""
-        def listen():
-            try:
-                while self.socket and self._running:
-                    try:
-                        client_sock, _ = self.socket.accept()
-                        try:
-                            data = client_sock.recv(1024)
-                            if data == b"ACTIVATE":
-                                self.activation_requested.emit() # Emit signal to main thread
-                        finally:
-                            client_sock.close()
-                    except socket.timeout:
-                        continue
-                    except Exception:
-                        break  # Socket likely closed
-            except Exception as e:
-                print(f"Listener error: {e}")
-        
-        self.listener_thread = threading.Thread(target=listen, daemon=True)
-        self.listener_thread.start()
-    
-    def _release(self):
-        """Release lock resources"""
+    def release_lock(self):
+        """Clean release of lock resources"""
         self._running = False
         if self.socket:
             try:
@@ -438,34 +405,142 @@ class SingletonLock(QObject):
             self.lockfile_path.unlink(missing_ok=True)
         except:
             pass
+        if self.listener_thread:
+            self.listener_thread.join(timeout=1)
+    
+    def activate_existing(self) -> bool:
+        """Activate existing instance"""
+        port = self._read_port_file()
+        if not port:
+            return False
+        
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1.0)
+            sock.connect((Config.PORTS, port))
+            sock.send(b"ACTIVATE")
+            sock.close()
+            return True
+        except Exception as e:
+            print(f"Failed to activate existing instance: {e}")
+            return False
+    
+    def _cleanup_stale_locks(self):
+        """Remove stale lock files"""
+        port = self._read_port_file()
+        if port and not self._is_port_active(port):
+            try:
+                self.lockfile_path.unlink()
+                print("Cleaned up stale lock file")
+            except:
+                pass
+    
+    def _is_port_active(self, port: int) -> bool:
+        """Check if port has active connection"""
+        try:
+            test_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            test_sock.settimeout(0.2)
+            result = test_sock.connect_ex((Config.PORTS, port))
+            test_sock.close()
+            return result == 0
+        except:
+            return False
+    
+    def _try_connect_to_existing(self, port: int) -> bool:
+        """Try to connect to existing instance"""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.5)
+            sock.connect((Config.PORTS, port))
+            sock.close()
+            return True
+        except (ConnectionRefusedError, socket.timeout, OSError):
+            return False
+    
+    def _create_lock(self) -> Optional[socket.socket]:
+        """Create new lock socket"""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind((Config.PORTS, self.lock_port))
+            sock.listen(5)
+            sock.settimeout(0.1)
+            return sock
+        except OSError as e:
+            print(f"Failed to bind to port {self.lock_port}: {e}")
+            return None
+    
+    def _write_port_file(self):
+        """Write port to lock file"""
+        try:
+            self.lockfile_path.parent.mkdir(parents=True, exist_ok=True)
+            self.lockfile_path.write_text(str(self.lock_port))
+            if Config.SYSTEM == "Windows":
+                try:
+                    subprocess.run(["attrib", "+H", str(self.lockfile_path)], 
+                                 capture_output=True, check=True)
+                except:
+                    pass
+        except Exception as e:
+            print(f"Failed to write lock file: {e}")
+    
+    def _read_port_file(self) -> Optional[int]:
+        """Read port from lock file"""
+        try:
+            if self.lockfile_path.exists():
+                port_str = self.lockfile_path.read_text().strip()
+                port = int(port_str)
+                return port
+        except (ValueError, OSError):
+            try:
+                self.lockfile_path.unlink()
+            except:
+                pass
+        return None
+    
+    def _start_listener(self):
+        """Start listener thread"""
+        def listen():
+            while self._running and self.socket:
+                try:
+                    client_sock, _ = self.socket.accept()
+                    try:
+                        data = client_sock.recv(1024)
+                        if data == b"ACTIVATE":
+                            self.activation_requested.emit()
+                    finally:
+                        client_sock.close()
+                except socket.timeout:
+                    continue
+                except:
+                    break
+        
+        self.listener_thread = threading.Thread(target=listen, daemon=True)
+        self.listener_thread.start()
 
 class FileManager:
     """Handles file operations and persistence"""
     @staticmethod
     def ensure_app_directory():
+        """Ensure app directory exists and is hidden on Windows"""
         Config.APPDATA_DIR.mkdir(parents=True, exist_ok=True)
         if Config.SYSTEM == "Windows":
             try:
-                subprocess.run(
-                    ["attrib", "+H", str(Config.APPDATA_DIR)], 
-                    capture_output=True,
-                    check=True
-                )
+                subprocess.run(["attrib", "+H", str(Config.APPDATA_DIR)], 
+                             capture_output=True, check=True)
             except subprocess.CalledProcessError:
                 pass
     
     @staticmethod
     def download_icon() -> str:
+        """Download and cache application icon"""
         FileManager.ensure_app_directory()
         if not Config.APP_ICON.exists():
             try:
                 urllib.request.urlretrieve(Config.ICON_URL, Config.APP_ICON)
                 if Config.SYSTEM == "Windows":
-                    subprocess.run(
-                        ["attrib","+H",str(Config.APP_ICON)], 
-                        capture_output=True,
-                        check=True
-                    )
+                    subprocess.run(["attrib", "+H", str(Config.APP_ICON)], 
+                                 capture_output=True, check=True)
             except Exception as e:
                 print(f"Failed to download icon: {e}")
                 Config.APP_ICON.touch()
@@ -473,124 +548,153 @@ class FileManager:
     
     @staticmethod
     def read_version_file(filepath: Path) -> Optional[str]:
+        """Read version from file with validation"""
         try:
             if filepath.exists():
                 with open(filepath, 'r', encoding='utf-8') as f:
                     version = f.read().strip()
-                    return version if version and version != Config.DEFAULT_VERSION else None
+                    # Validate version format
+                    if version and len(version.split('.')) >= 2 and version != Config.DEFAULT_VERSION:
+                        return version
         except Exception as e:
             print(f"Error reading version file {filepath}: {e}")
         return None
     
     @staticmethod
     def write_version_file(filepath: Path, version: str):
+        """Write version to file"""
         try:
             FileManager.ensure_app_directory()
             with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(version)
+                f.write(version.strip())
+            print(f"Version {version} written to {filepath}")
         except Exception as e:
             print(f"Error writing version file {filepath}: {e}")
     
     @staticmethod
     def update_last_check():
+        """Update last update check timestamp"""
         try:
+            FileManager.ensure_app_directory()
             Config.UPDATE_CHECK_FILE.write_text(datetime.now().isoformat())
         except Exception:
             pass
 
 class VersionManager:
-    """Manages application versioning and updates"""
+    """Enhanced version management with proper local detection"""
     @staticmethod
-    def load_local_version() -> Optional[str]:
+    def detect_local_version() -> Optional[str]:
+        """Detect version from local files or embedded info"""
+        # Check for local VERSION.txt file first
         local_file = Path('VERSION.txt')
-        version = FileManager.read_version_file(local_file)
-        if version:
-            FileManager.write_version_file(Config.VERSION_FILE, version)
-            return version
-        return FileManager.read_version_file(Config.VERSION_FILE)
+        if local_file.exists():
+            version = FileManager.read_version_file(local_file)
+            if version:
+                print(f"Detected local version from VERSION.txt: {version}")
+                FileManager.write_version_file(Config.VERSION_FILE, version)
+                return version
+        
+        # Try to read from current installation's version file
+        installed_version = FileManager.read_version_file(Config.VERSION_FILE)
+        if installed_version:
+            print(f"Using installed version: {installed_version}")
+            return installed_version
+        
+        # Fallback to default
+        return None
     
     @staticmethod
     def get_cached_latest() -> Optional[str]:
+        """Get cached latest version if still valid"""
         try:
             if Config.VERSION_CACHE_FILE.exists():
                 content = Config.VERSION_CACHE_FILE.read_text(encoding='utf-8').strip().split('\n')
                 if len(content) >= 2:
-                    version, timestamp_str = content[0].strip(), content[1]
-                    timestamp = int(timestamp_str)
-                    if (version != "unknown" and 
-                        (time.time() - timestamp) / 86400 <= 7):
-                        return version
-        except Exception:
-            pass
+                    version, timestamp_str = content[0].strip(), content[1].strip()
+                    try:
+                        timestamp = int(timestamp_str)
+                        # Cache valid for 7 days
+                        if (time.time() - timestamp) / 86400 <= 7 and version != Config.DEFAULT_VERSION:
+                            return version
+                    except ValueError:
+                        pass
+        except Exception as e:
+            print(f"Error reading version cache: {e}")
         return None
     
     @staticmethod
     def cache_latest_version(version: str):
+        """Cache latest version with timestamp"""
         try:
             timestamp = int(time.time())
+            FileManager.ensure_app_directory()
             Config.VERSION_CACHE_FILE.write_text(f"{version}\n{timestamp}", encoding='utf-8')
-        except Exception:
-            pass
+            print(f"Cached latest version: {version}")
+        except Exception as e:
+            print(f"Failed to cache version: {e}")
     
     @staticmethod
     def fetch_latest_release() -> Dict[str, Any]:
+        """Fetch latest release info from GitHub"""
         try:
             headers = {
                 'Accept': 'application/vnd.github.v3+json',
                 'User-Agent': Config.APP_NAME
             }
             url = f"https://api.github.com/repos/{Config.GITHUB_REPO}/releases/latest"
-            print(f"Fetching latest release from: {url}")
-            response = requests.get(url, headers=headers, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                print(f"GitHub API response received: {data.get('tag_name', 'No tag')}")
-                if 'tag_name' in data and data['tag_name']:
-                    version = data['tag_name'].lstrip('v')
-                    return {
-                        'version': version,
-                        'download_url': data.get('html_url', f"https://github.com/{Config.GITHUB_REPO}/releases/latest"),
-                        'release_notes': data.get('body', 'No release notes available'),
-                        'success': True,
-                        'assets': data.get('assets', [])
-                    }
-            elif response.status_code == 404:
-                print(f"Repository not found: {Config.GITHUB_REPO}")
+            print(f"Fetching latest release from GitHub...")
+            
+            response = requests.get(url, headers=headers, timeout=15)
+            response.raise_for_status()
+            
+            data = response.json()
+            tag_name = data.get('tag_name', '').lstrip('v')
+            
+            if tag_name and tag_name != Config.DEFAULT_VERSION:
+                print(f"Found latest release: {tag_name}")
+                return {
+                    'version': tag_name,
+                    'download_url': data.get('html_url', f"https://github.com/{Config.GITHUB_REPO}/releases/latest"),
+                    'release_notes': data.get('body', 'No release notes available'),
+                    'success': True,
+                    'assets': data.get('assets', [])
+                }
             else:
-                print(f"GitHub API error: HTTP {response.status_code}")
+                print("No valid tag name found in release")
+                
         except requests.exceptions.RequestException as e:
-            print(f"Network error fetching releases: {e}")
+            print(f"Network error: {e}")
         except Exception as e:
-            print(f"Unexpected error fetching releases: {e}")
+            print(f"Error fetching release: {e}")
         
         return {
             'version': Config.DEFAULT_VERSION,
             'download_url': f"https://github.com/{Config.GITHUB_REPO}",
             'release_notes': 'Unable to fetch latest release.',
-            'success': False,
-            'error': 'Failed to fetch from GitHub API'
+            'success': False
         }
     
     @staticmethod
     def get_current_version() -> str:
-        version = VersionManager.load_local_version()
-        if version:
-            print(f"Using local version: {version}")
-            return version
+        """Get the current application version with proper fallback"""
+        # First try local detection
+        local_version = VersionManager.detect_local_version()
+        if local_version:
+            return local_version
         
+        # Try cached latest version
         cached = VersionManager.get_cached_latest()
-        if cached and cached != Config.DEFAULT_VERSION:
-            print(f"Using cached version: {cached}")
+        if cached:
             FileManager.write_version_file(Config.VERSION_FILE, cached)
             return cached
         
-        print("No local version found, fetching from GitHub...")
+        # Fetch from GitHub as fallback
+        print("No local version found, checking GitHub...")
         release_info = VersionManager.fetch_latest_release()
-        if release_info.get('success') and release_info['version'] != Config.DEFAULT_VERSION:
+        if release_info.get('success'):
             version = release_info['version']
             VersionManager.cache_latest_version(version)
             FileManager.write_version_file(Config.VERSION_FILE, version)
-            print(f"Fetched and cached version: {version}")
             return version
         
         print("Using default version")
@@ -598,12 +702,14 @@ class VersionManager:
     
     @staticmethod
     def is_newer_version(new: str, current: str) -> bool:
+        """Compare semantic versions"""
         try:
-            def to_tuple(v: str) -> tuple:
+            def parse_version(v: str) -> tuple:
                 parts = [int(p) if p.isdigit() else 0 for p in v.split('.')[:3]]
                 return tuple(parts) + (0, 0, 0)[:3-len(parts)]
-            return to_tuple(new) > to_tuple(current)
-        except:
+            
+            return parse_version(new) > parse_version(current)
+        except Exception:
             return new > current
 
 class UpdateChecker(QThread):
@@ -989,7 +1095,7 @@ class AutoClickerApp(QMainWindow):
         self.tray = SystemTrayManager(self)
         self.clicker = ClickerEngine(self)
         
-        # Connect lock activation signal AFTER creating the window
+        # Connect singleton activation
         self.lock.activation_requested.connect(self.show_normal)
         
         self._init_ui()
@@ -1141,9 +1247,11 @@ class AutoClickerApp(QMainWindow):
             self.tray.show_minimize_notification()
     
     def quit_app(self):
+        """Clean shutdown with lock release"""
         self.log("👋 Shutting down...")
         if hasattr(self, 'update_timer'):
             self.update_timer.stop()
+        self.lock.release_lock()
         if self.tray and self.tray.tray_icon:
             self.tray.tray_icon.hide()
         try:
@@ -1152,76 +1260,77 @@ class AutoClickerApp(QMainWindow):
         except:
             pass
 
-class initializer:
-    def __init__(self):
-        super().__init__()
-        pass
-
-    def activate_existing_instance(self, lockfile_path: Path):
-        """Attempt to activate existing instance using port from lockfile"""
-        try:
-            port = None
-            if lockfile_path.exists():
-                try:
-                    port = int(lockfile_path.read_text().strip())
-                except (ValueError, OSError):
-                    return False
-            if not port:
-                return False
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(0.5)
-            sock.connect((Config.PORTS, port))
-            sock.send(b"ACTIVATE")
-            sock.close()
-            return True
-        except Exception:
-            return False
-
-    def run(self):
-        """Application entry point with singleton enforcement"""
+class ApplicationLauncher:
+    """Handles application startup with singleton enforcement"""
+    @staticmethod
+    def run():
+        """Main application entry point"""
+        # Ensure app directory
         FileManager.ensure_app_directory()
+        
+        # Check compatibility first
+        compat_result = OSCompatibilityChecker.check_compatibility()
+        OSCompatibilityChecker.show_compatibility_dialog(compat_result)
+        if not compat_result["compatible"]:
+            sys.exit(1)
+        
+        # Create QApplication
         app = QApplication(sys.argv)
         app.setQuitOnLastWindowClosed(False)
         app.setApplicationName(Config.APP_NAME)
         app.setOrganizationName(Config.AUTHORNAME)
+        
+        # Set application icon
         try:
-            try:
-                memory = psutil.virtual_memory()
-                memory_is_available = memory.available < 256 * 1024 * 1024 # Less than 256MB
-                if memory_is_available:
-                    print("Warning: Low memory available")
-            except ImportError:
-                print("psutil not available, skipping resource check")
             icon_path = FileManager.download_icon()
             app_icon = QIcon(icon_path)
             if not app_icon.isNull():
                 app.setWindowIcon(app_icon)
-            lock = SingletonLock()
-            with lock.acquire() as acquired_lock:
-                if acquired_lock is None:
-                    print("Another instance detected")
-                    reply = QMessageBox.question(
-                        None, "Instance Already Running",
-                        "Sigma Auto Clicker is already running.\nActivate existing instance?",
-                        QMessageBox.Yes | QMessageBox.No
-                    )
-                    if reply == QMessageBox.Yes:
-                        if self.activate_existing_instance(lock.lockfile_path):
-                            print("Activation signal sent")
-                        else:
-                            QMessageBox.warning(
-                                None,
-                                "Error", 
-                                "Could not activate existing instance"
-                            )
+        except Exception as e:
+            print(f"Failed to set app icon: {e}")
+        
+        # Singleton enforcement
+        lock = SingletonLock()
+        acquired = lock.acquire_lock()
+        
+        if acquired is None:
+            # Show custom dialog for existing instance
+            dialog = InstanceDialog(lock.lockfile_path)
+            result = dialog.exec()
+            
+            if result == QDialog.Accepted:  # Bring to front
+                if lock.activate_existing():
+                    print("Activated existing instance")
                     sys.exit(0)
+                else:
+                    QMessageBox.critical(None, "Error", 
+                                       "Could not activate existing instance.\nPlease close other instances and try again.")
+                    sys.exit(1)
+            elif result == 2:  # Force new instance
+                # Clean up existing lock and try again
+                try:
+                    lock.lockfile_path.unlink(missing_ok=True)
+                except:
+                    pass
+                acquired = lock.acquire_lock()
+                if acquired is None:
+                    QMessageBox.critical(None, "Error", "Could not create new instance.")
+                    sys.exit(1)
+            else:  # User chose to exit
+                sys.exit(0)
+        
+        try:
+            # Create and show main window
             window = AutoClickerApp(lock)
             window.show()
             sys.exit(app.exec())
         except Exception as e:
             print(f"Application error: {e}")
+            lock.release_lock()
             sys.exit(1)
+        finally:
+            lock.release_lock()
 
 if __name__ == "__main__":
-    Appinitializer = initializer()
+    Appinitializer = ApplicationLauncher()
     Appinitializer.run()
