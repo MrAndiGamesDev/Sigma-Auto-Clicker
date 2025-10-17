@@ -305,7 +305,6 @@ class OSCompatibilityChecker:
 
 class InstanceDialog(QDialog):
     """Custom dialog for handling multiple instance detection"""
-    
     def __init__(self, lockfile_path: Path, parent=None):
         super().__init__(parent)
         self.lockfile_path = lockfile_path
@@ -313,7 +312,6 @@ class InstanceDialog(QDialog):
         self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint | Qt.WindowCloseButtonHint)
         self.setModal(True)
         self.setFixedSize(500, 200)
-        
         self._setup_ui()
     
     def _setup_ui(self):
@@ -322,38 +320,50 @@ class InstanceDialog(QDialog):
         # Icon and title
         header_layout = QHBoxLayout()
         icon_label = QLabel("🖱️")
-        icon_label.setFont(QFont("Segoe UI Emoji", 24))
+        icon_label.setStyleSheet("font-size: 24px; margin: 5px;")
         title_label = QLabel(f"{Config.APP_NAME} is already running!")
         title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #d32f2f; margin-left: 10px;")
         
         header_layout.addWidget(icon_label)
         header_layout.addWidget(title_label)
+        header_layout.addStretch()
         layout.addLayout(header_layout)
         
         # Message
         message = QLabel("An instance of the application is already active.\n\nWhat would you like to do?")
         message.setWordWrap(True)
-        message.setStyleSheet("font-size: 12px; color: #333; padding: 15px; background-color: #f5f5f5; border-radius: 5px;")
+        message.setStyleSheet("font-size: 12px; color: #333; padding: 15px; background-color: #f5f5f5; border-radius: 5px; margin: 10px;")
         layout.addWidget(message)
         
-        # Buttons
-        button_box = QDialogButtonBox(QDialogButtonBox.Yes | QDialogButtonBox.No | QDialogButtonBox.Ignore)
-        button_box.setOrientation(Qt.Horizontal)
-        button_box.yesButton().setText("👁️ Bring to Front")
-        button_box.noButton().setText("🚪 Exit")
-        button_box.button(QDialogButtonBox.Ignore).setText("⚠️ Force New Instance")
+        # Custom buttons
+        button_layout = QHBoxLayout()
         
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        button_box.button(QDialogButtonBox.Ignore).clicked.connect(self._force_new)
+        self.yes_btn = QPushButton("👁️ Bring to Front")
+        self.no_btn = QPushButton("🚪 Exit")
+        self.force_btn = QPushButton("⚠️ Force New Instance")
         
-        layout.addWidget(button_box)
+        # Style buttons
+        self.yes_btn.setStyleSheet("QPushButton { background-color: #4caf50; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-weight: bold; } QPushButton:hover { background-color: #45a049; }")
+        self.no_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-weight: bold; } QPushButton:hover { background-color: #da190b; }")
+        self.force_btn.setStyleSheet("QPushButton { background-color: #ff9800; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-weight: bold; } QPushButton:hover { background-color: #e68900; }")
+        
+        # Connect signals
+        self.yes_btn.clicked.connect(self.accept)
+        self.no_btn.clicked.connect(self.reject)
+        self.force_btn.clicked.connect(self._force_new)
+        
+        button_layout.addWidget(self.yes_btn)
+        button_layout.addWidget(self.force_btn)
+        button_layout.addWidget(self.no_btn)
+        button_layout.addStretch()
+        
+        layout.addLayout(button_layout)
         self.setLayout(layout)
     
     def _force_new(self):
         """Handle force new instance"""
         reply = QMessageBox.warning(
-            self, "Warning", 
+            self, "⚠️ Warning", 
             "Running multiple instances may cause conflicts and instability!\n\nContinue anyway?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
@@ -397,14 +407,15 @@ class SingletonLock(QObject):
         if self.socket:
             try:
                 self.socket.close()
+                self.socket = None
             except:
                 pass
-            self.socket = None
         try:
-            self.lockfile_path.unlink(missing_ok=True)
+            if self.lockfile_path.exists():
+                self.lockfile_path.unlink()  # Remove missing_ok=True dependency
         except:
             pass
-        if self.listener_thread:
+        if self.listener_thread and self.listener_thread.is_alive():
             self.listener_thread.join(timeout=1)
     
     def activate_existing(self) -> bool:
@@ -1291,7 +1302,7 @@ class ApplicationLauncher:
         # Singleton enforcement
         lock = SingletonLock()
         acquired = lock.acquire_lock()
-        
+
         if acquired is None:
             # Show custom dialog for existing instance
             dialog = InstanceDialog(lock.lockfile_path)
@@ -1302,20 +1313,27 @@ class ApplicationLauncher:
                     print("Activated existing instance")
                     sys.exit(0)
                 else:
-                    QMessageBox.critical(None, "Error", 
-                                       "Could not activate existing instance.\nPlease close other instances and try again.")
+                    QMessageBox.critical(None, "❌ Error", 
+                                    "Could not activate existing instance.\nPlease close other instances and try again.")
                     sys.exit(1)
             elif result == 2:  # Force new instance
                 # Clean up existing lock and try again
                 try:
-                    lock.lockfile_path.unlink(missing_ok=True)
+                    if lock.lockfile_path.exists():
+                        lock.lockfile_path.unlink()
+                    # Close any existing socket
+                    lock.release_lock()
                 except:
                     pass
+                
+                # Try to acquire lock again
                 acquired = lock.acquire_lock()
                 if acquired is None:
-                    QMessageBox.critical(None, "Error", "Could not create new instance.")
+                    QMessageBox.critical(None, "❌ Error", 
+                                    "Could not create new instance. Another instance may still be running.")
                     sys.exit(1)
-            else:  # User chose to exit
+                print("Forced new instance created")
+            else:  # User chose to exit (rejected)
                 sys.exit(0)
         
         try:
@@ -1331,5 +1349,9 @@ class ApplicationLauncher:
             lock.release_lock()
 
 if __name__ == "__main__":
-    Appinitializer = ApplicationLauncher()
-    Appinitializer.run()
+    compat_result = OSCompatibilityChecker.check_compatibility()
+    OSCompatibilityChecker.show_compatibility_dialog(compat_result)
+    if compat_result["compatible"]:
+        ApplicationLauncher.run()
+    else:
+        sys.exit(1)
