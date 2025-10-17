@@ -9,7 +9,6 @@ import webbrowser
 import pyautogui
 import keyboard
 import socket
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, Callable
@@ -167,8 +166,9 @@ class Config:
     """Application configuration constants"""
     APP_NAME = "Sigma Auto Clicker"
     HOTKEY = "Ctrl+F"
-    ICON_URL = "https://raw.githubusercontent.com/MrAndiGamesDev/My-App-Icons/main/mousepointer.ico"
-    GITHUB_REPO = "MrAndiGamesDev/Sigma-Auto-Clicker"
+    AUTHORNAME = "MrAndiGamesDev"
+    ICON_URL = f"https://raw.githubusercontent.com/{AUTHORNAME}/My-App-Icons/main/mousepointer.ico"
+    GITHUB_REPO = f"{AUTHORNAME}/Sigma-Auto-Clicker"
     UPDATE_CHECK_INTERVAL = 24 * 60 * 60 * 1000
     DEFAULT_VERSION = "1.0.0"
     SYSTEM = platform.system()
@@ -197,7 +197,6 @@ class Config:
 
 class FileManager:
     """Handles file operations and persistence"""
-    
     @staticmethod
     def ensure_app_directory():
         Config.APPDATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -251,7 +250,6 @@ class FileManager:
 
 class VersionManager:
     """Manages application versioning and updates"""
-    
     @staticmethod
     def load_local_version() -> Optional[str]:
         local_file = Path('VERSION.txt')
