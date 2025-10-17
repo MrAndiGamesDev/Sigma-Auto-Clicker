@@ -5,22 +5,163 @@ import threading
 import subprocess
 import urllib.request
 import requests
+import webbrowser
+import pyautogui
+import keyboard
+import socket
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, Callable
-import pyautogui
-import keyboard
+from contextlib import contextmanager
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QLineEdit, QPushButton,
     QTabWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTextEdit, QFileDialog,
     QComboBox, QSystemTrayIcon, QMenu, QFormLayout, QMessageBox
 )
-from PySide6.QtGui import QIcon, QAction
-from PySide6.QtCore import Qt, QTimer, QThread, Signal as pyqtSignal
+from PySide6.QtGui import QIcon, QAction, QColor
+from PySide6.QtCore import Qt, QTimer, QThread, Signal as pyqtSignal, QObject
 
 # PyAutoGUI settings
 pyautogui.PAUSE = 0
 pyautogui.FAILSAFE = False
+
+class SingletonLock(QObject):
+    """Manages singleton application lock using TCP socket on localhost"""
+    
+    activation_requested = pyqtSignal()
+    
+    def __init__(self, lock_port: int = 49513):
+        super().__init__()
+        self.lock_port = lock_port
+        self.socket = None
+        self.listener_thread = None
+        self.lockfile_path = Config.APPDATA_DIR / f"app.lock.{lock_port}"
+        self._running = True
+    
+    @contextmanager
+    def acquire(self):
+        """Context manager to acquire and release lock"""
+        sock = self._try_acquire()
+        if sock is None:
+            yield None  # Another instance running
+            return
+            
+        try:
+            self.socket = sock
+            self._write_port_file()
+            self._start_listener()
+            yield sock  # Lock acquired successfully
+        finally:
+            self._release()
+    
+    def _try_acquire(self) -> Optional[socket.socket]:
+        """Attempt to acquire lock or detect existing instance"""
+        # First check if lockfile exists with a port
+        port = self._read_port_file()
+        if port:
+            if self._try_connect_to_existing(port):
+                return None  # Existing instance found
+        
+        # Try to bind to port directly (will fail if another instance is using it)
+        return self._create_lock()
+    
+    def _try_connect_to_existing(self, port: int) -> bool:
+        """Try to connect to existing instance on given port"""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.1)
+            sock.connect(('127.0.0.1', port))
+            sock.close()
+            return True
+        except (ConnectionRefusedError, socket.timeout, OSError):
+            return False
+    
+    def _create_lock(self) -> Optional[socket.socket]:
+        """Create new lock socket on localhost"""
+        sock = None
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(('127.0.0.1', self.lock_port))
+            sock.listen(5)
+            return sock
+        except OSError as e:
+            if "Address already in use" in str(e):
+                print(f"Port {self.lock_port} already in use, another instance may be running")
+            else:
+                print(f"Failed to create lock socket: {e}")
+            if sock:
+                sock.close()
+            return None
+    
+    def _write_port_file(self):
+        """Write the port number to lockfile"""
+        try:
+            FileManager.ensure_app_directory()
+            self.lockfile_path.write_text(str(self.lock_port))
+            # Hide on Windows
+            if Config.SYSTEM == "Windows":
+                try:
+                    subprocess.run(["attrib", "+H", str(self.lockfile_path)], 
+                                 capture_output=True, check=True)
+                except subprocess.CalledProcessError:
+                    pass
+        except Exception as e:
+            print(f"Failed to write port file: {e}")
+    
+    def _read_port_file(self) -> Optional[int]:
+        """Read port number from lockfile"""
+        try:
+            if self.lockfile_path.exists():
+                port_str = self.lockfile_path.read_text().strip()
+                port = int(port_str)
+                return port
+        except (ValueError, OSError):
+            # Cleanup invalid lockfile
+            try:
+                self.lockfile_path.unlink()
+            except:
+                pass
+        return None
+    
+    def _start_listener(self):
+        """Start background thread to listen for activation requests"""
+        def listen():
+            try:
+                while self.socket and self._running:
+                    try:
+                        client_sock, _ = self.socket.accept()
+                        try:
+                            data = client_sock.recv(1024)
+                            if data == b"ACTIVATE":
+                                # Emit signal to main thread
+                                self.activation_requested.emit()
+                        finally:
+                            client_sock.close()
+                    except socket.timeout:
+                        continue
+                    except Exception:
+                        break  # Socket likely closed
+            except Exception as e:
+                print(f"Listener error: {e}")
+        
+        self.listener_thread = threading.Thread(target=listen, daemon=True)
+        self.listener_thread.start()
+    
+    def _release(self):
+        """Release lock resources"""
+        self._running = False
+        if self.socket:
+            try:
+                self.socket.close()
+            except:
+                pass
+            self.socket = None
+        try:
+            self.lockfile_path.unlink(missing_ok=True)
+        except:
+            pass
 
 class Config:
     """Application configuration constants"""
@@ -28,11 +169,11 @@ class Config:
     HOTKEY = "Ctrl+F"
     ICON_URL = "https://raw.githubusercontent.com/MrAndiGamesDev/My-App-Icons/main/mousepointer.ico"
     GITHUB_REPO = "MrAndiGamesDev/Sigma-Auto-Clicker"
-    UPDATE_CHECK_INTERVAL = 24 * 60 * 60 * 1000  # 24 hours in ms
+    UPDATE_CHECK_INTERVAL = 24 * 60 * 60 * 1000
     DEFAULT_VERSION = "1.0.0"
-    
     SYSTEM = platform.system()
     HOME_DIR = Path.home()
+
     APPDATA_DIR = (
         HOME_DIR / "AppData" / "Roaming" / "SigmaAutoClicker" 
         if SYSTEM == "Windows" else HOME_DIR / ".sigma_autoclicker"
@@ -45,6 +186,7 @@ class Config:
     VERSION_CACHE_FILE = APPDATA_DIR / "version_cache.txt"
     
     UPDATE_LOGS = [
+        "2025-10-18: UI/Scripts Improvements and Bug Fixes and much more!",
         "2025-10-16: Fixed app bugs! and much more (part 3)",
         "2025-10-16: Fixed An Update Management Bug and much more! (part 2)",
         "2025-10-16: Added automatic update checking Version management UI/Code improvements UI Improvements And Much More!",
@@ -55,29 +197,26 @@ class Config:
 
 class FileManager:
     """Handles file operations and persistence"""
+    
     @staticmethod
     def ensure_app_directory():
-        """Create and configure app directory"""
         Config.APPDATA_DIR.mkdir(parents=True, exist_ok=True)
         if Config.SYSTEM == "Windows":
             try:
                 subprocess.run(["attrib", "+H", str(Config.APPDATA_DIR)], 
-                             check=True, capture_output=True)
+                             capture_output=True, check=True)
             except subprocess.CalledProcessError:
                 pass
     
     @staticmethod
     def download_icon() -> str:
-        """Download and cache application icon with fallback"""
         FileManager.ensure_app_directory()
         if not Config.APP_ICON.exists():
             try:
                 urllib.request.urlretrieve(Config.ICON_URL, Config.APP_ICON)
                 if Config.SYSTEM == "Windows":
-                    subprocess.run(
-                        ["attrib", "+H", str(Config.APP_ICON)], 
-                        check=True, capture_output=True
-                    )
+                    subprocess.run(["attrib", "+H", str(Config.APP_ICON)], 
+                                 capture_output=True, check=True)
             except Exception as e:
                 print(f"Failed to download icon: {e}")
                 Config.APP_ICON.touch()
@@ -85,7 +224,6 @@ class FileManager:
     
     @staticmethod
     def read_version_file(filepath: Path) -> Optional[str]:
-        """Safely read version from file"""
         try:
             if filepath.exists():
                 with open(filepath, 'r', encoding='utf-8') as f:
@@ -97,17 +235,15 @@ class FileManager:
     
     @staticmethod
     def write_version_file(filepath: Path, version: str):
-        """Write version to file"""
         try:
             FileManager.ensure_app_directory()
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(version)
         except Exception as e:
             print(f"Error writing version file {filepath}: {e}")
-
+    
     @staticmethod
     def update_last_check():
-        """Update last update check timestamp"""
         try:
             Config.UPDATE_CHECK_FILE.write_text(datetime.now().isoformat())
         except Exception:
@@ -115,9 +251,9 @@ class FileManager:
 
 class VersionManager:
     """Manages application versioning and updates"""
+    
     @staticmethod
     def load_local_version() -> Optional[str]:
-        """Load version from local VERSION.txt or cached current version"""
         local_file = Path('VERSION.txt')
         version = FileManager.read_version_file(local_file)
         if version:
@@ -127,7 +263,6 @@ class VersionManager:
     
     @staticmethod
     def get_cached_latest() -> Optional[str]:
-        """Get cached latest version with age validation"""
         try:
             if Config.VERSION_CACHE_FILE.exists():
                 content = Config.VERSION_CACHE_FILE.read_text(encoding='utf-8').strip().split('\n')
@@ -143,7 +278,6 @@ class VersionManager:
     
     @staticmethod
     def cache_latest_version(version: str):
-        """Cache latest version with timestamp"""
         try:
             timestamp = int(time.time())
             Config.VERSION_CACHE_FILE.write_text(f"{version}\n{timestamp}", encoding='utf-8')
@@ -152,14 +286,13 @@ class VersionManager:
     
     @staticmethod
     def fetch_latest_release() -> Dict[str, Any]:
-        """Fetch latest release info from GitHub API"""
         try:
             headers = {
                 'Accept': 'application/vnd.github.v3+json',
                 'User-Agent': Config.APP_NAME
             }
             url = f"https://api.github.com/repos/{Config.GITHUB_REPO}/releases/latest"
-            print(f"Fetching latest release from: {url}")  # Debug log
+            print(f"Fetching latest release from: {url}")
             
             response = requests.get(url, headers=headers, timeout=10)
             
@@ -176,45 +309,36 @@ class VersionManager:
                         'success': True,
                         'assets': data.get('assets', [])
                     }
-                else:
-                    print("No tag_name found in response")
-                    
             elif response.status_code == 404:
                 print(f"Repository not found: {Config.GITHUB_REPO}")
             else:
-                print(f"GitHub API error: HTTP {response.status_code} - {response.text[:200]}")
-                
+                print(f"GitHub API error: HTTP {response.status_code}")
         except requests.exceptions.RequestException as e:
             print(f"Network error fetching releases: {e}")
         except Exception as e:
             print(f"Unexpected error fetching releases: {e}")
         
-        # Fallback response
         return {
             'version': Config.DEFAULT_VERSION,
             'download_url': f"https://github.com/{Config.GITHUB_REPO}",
-            'release_notes': 'Unable to fetch latest release. Please check GitHub manually.',
+            'release_notes': 'Unable to fetch latest release.',
             'success': False,
             'error': 'Failed to fetch from GitHub API'
         }
     
     @staticmethod
     def get_current_version() -> str:
-        """Get the currently running version"""
-        # First try local VERSION.txt
         version = VersionManager.load_local_version()
         if version:
             print(f"Using local version: {version}")
             return version
         
-        # Try cached latest version
         cached = VersionManager.get_cached_latest()
         if cached and cached != Config.DEFAULT_VERSION:
             print(f"Using cached version: {cached}")
             FileManager.write_version_file(Config.VERSION_FILE, cached)
             return cached
         
-        # Fetch from GitHub if no local version found
         print("No local version found, fetching from GitHub...")
         release_info = VersionManager.fetch_latest_release()
         if release_info.get('success') and release_info['version'] != Config.DEFAULT_VERSION:
@@ -229,7 +353,6 @@ class VersionManager:
     
     @staticmethod
     def is_newer_version(new: str, current: str) -> bool:
-        """Compare two version strings"""
         try:
             def to_tuple(v: str) -> tuple:
                 parts = [int(p) if p.isdigit() else 0 for p in v.split('.')[:3]]
@@ -239,7 +362,6 @@ class VersionManager:
             return new > current
 
 class UpdateChecker(QThread):
-    """Background thread for checking updates"""
     update_available = pyqtSignal(dict)
     check_completed = pyqtSignal(bool, str)
     version_fetched = pyqtSignal(str)
@@ -249,33 +371,27 @@ class UpdateChecker(QThread):
         self.current_version = current_version
     
     def run(self):
-        """Execute update check"""
         try:
             print("Starting update check...")
             release_info = VersionManager.fetch_latest_release()
             latest_version = release_info.get('version', self.current_version)
-            print(f"Latest version found: {latest_version}, Current: {self.current_version}")
             
             self.version_fetched.emit(latest_version)
             
             if release_info.get('success', False):
                 if VersionManager.is_newer_version(latest_version, self.current_version):
-                    print(f"Update available: {latest_version} > {self.current_version}")
                     self.update_available.emit(release_info)
                     self.check_completed.emit(True, f"Update available: v{latest_version}")
                 else:
-                    print("No update available")
                     self.check_completed.emit(True, f"You're up to date! (v{self.current_version})")
             else:
-                self.check_completed.emit(True, "Update check unavailable - continuing with current version")
+                self.check_completed.emit(True, "Update check unavailable")
                 VersionManager.cache_latest_version(latest_version)
-                
         except Exception as e:
             print(f"Update check error: {e}")
             self.check_completed.emit(False, f"Update check failed: {str(e)}")
 
 class Styles:
-    """UI styling management"""
     BASE_STYLES = {
         "Dark": """
             QMainWindow { background-color: #1e1e2e; color: #ffffff; }
@@ -284,18 +400,13 @@ class Styles:
             QLabel { color: #ffffff; }
             QLineEdit { background-color: #2e2e3e; border: 1px solid #444; 
                        border-radius: 5px; padding: 5px; color: #fff; }
-            QPushButton { background-color: #0a84ff; color: white; border: none; 
-                         border-radius: 6px; padding: 8px; font-weight: bold; }
-            QPushButton:hover { background-color: #1c9bff; }
-            QPushButton:disabled { background-color: #555; color: #888; }
             QTextEdit { background-color: #2e2e3e; color: #fff; border: 1px solid #444; 
                        border-radius: 5px; padding: 5px; }
-            QTabWidget::pane { border: 1px solid #333; border-radius: 6px; background: #2e2e3e; }
-            QTabBar::tab { background: #2e2e3e; color: #aaa; padding: 8px; 
-                          border-top-left-radius: 6px; border-top-right-radius: 6px; }
-            QTabBar::tab:selected { background: #0a84ff; color: white; }
             QComboBox { background-color: #2e2e3e; color: white; border: 1px solid #444; 
                        border-radius: 5px; padding: 5px; }
+            QTabWidget::pane { border: 1px solid #333; background: #2e2e3e; }
+            QTabBar::tab { background: #2e2e3e; color: #aaa; padding: 8px; }
+            QTabBar::tab:selected { background: #0a84ff; color: white; }
         """,
         "Light": """
             QMainWindow { background-color: #f0f0f0; color: #000000; }
@@ -304,24 +415,23 @@ class Styles:
             QLabel { color: #000; }
             QLineEdit { background-color: #fff; border: 1px solid #aaa; 
                        border-radius: 5px; padding: 5px; color: #000; }
-            QPushButton { background-color: #0078d7; color: white; border: none; 
-                         border-radius: 6px; padding: 8px; font-weight: bold; }
-            QPushButton:hover { background-color: #005a9e; }
-            QPushButton:disabled { background-color: #ccc; color: #666; }
             QTextEdit { background-color: #fff; color: #000; border: 1px solid #aaa; 
                        border-radius: 5px; padding: 5px; }
-            QTabWidget::pane { border: 1px solid #ccc; border-radius: 6px; background: #fff; }
-            QTabBar::tab { background: #e0e0e0; color: #444; padding: 8px; 
-                          border-top-left-radius: 6px; border-top-right-radius: 6px; }
-            QTabBar::tab:selected { background: #0078d7; color: white; }
             QComboBox { background-color: #fff; color: #000; border: 1px solid #aaa; 
                        border-radius: 5px; padding: 5px; }
+            QTabWidget::pane { border: 1px solid #ccc; background: #fff; }
+            QTabBar::tab { background: #e0e0e0; color: #444; padding: 8px; }
+            QTabBar::tab:selected { background: #0078d7; color: white; }
         """
     }
     
     COLOR_THEMES = {
-        "Blue": "#0a84ff", "Green": "#28a745", "Red": "#d32f2f",
-        "Orange": "#ff9800", "Purple": "#9c27b0", "Teal": "#009688"
+        "Blue": {"base": "#0078d4", "hover": "#106ebe"},
+        "Green": {"base": "#107c10", "hover": "#0a5f0a"},
+        "Red": {"base": "#d13438", "hover": "#a52a2e"},
+        "Orange": {"base": "#d24726", "hover": "#a63d1f"},
+        "Purple": {"base": "#701cb8", "hover": "#5a1699"},
+        "Teal": {"base": "#00838f", "hover": "#006d77"}
     }
     
     @classmethod
@@ -329,9 +439,55 @@ class Styles:
         return cls.BASE_STYLES.get(mode, cls.BASE_STYLES["Dark"])
     
     @classmethod
-    def get_button_style(cls, theme: str) -> str:
-        color = cls.COLOR_THEMES.get(theme, "#0a84ff")
-        return f"QPushButton {{ background-color: {color}; color: white; border: none; border-radius: 6px; padding: 8px; font-weight: bold; }} QPushButton:hover {{ background-color: {color[:-2]}cc; }}"
+    def get_button_style(cls, theme: str, appearance: str = "Dark") -> str:
+        theme_config = cls.COLOR_THEMES.get(theme, cls.COLOR_THEMES["Blue"])
+        base_color = theme_config["base"]
+        hover_color = theme_config["hover"]
+        
+        if appearance == "Light":
+            base_color = cls._darken_color(base_color, 0.1)
+            hover_color = cls._darken_color(hover_color, 0.15)
+        
+        style = f"""
+            QPushButton {{
+                background-color: {base_color};
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 6px 12px;
+                font-weight: bold;
+                font-size: 12px;
+                min-height: 20px;
+            }}
+            QPushButton:hover {{
+                background-color: {hover_color};
+            }}
+            QPushButton:pressed {{
+                background-color: {cls._darken_color(base_color, 0.2)};
+            }}
+            QPushButton:disabled {{
+                background-color: #666;
+                color: #999;
+            }}
+        """
+        return style
+    
+    @staticmethod
+    def _darken_color(hex_color: str, factor: float) -> str:
+        try:
+            hex_color = hex_color.lstrip('#')
+            rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+            darkened = tuple(max(0, int(c * (1 - factor))) for c in rgb)
+            return f"#{darkened[0]:02x}{darkened[1]:02x}{darkened[2]:02x}"
+        except:
+            return hex_color
+    
+    @classmethod
+    def apply_theme_to_all_buttons(cls, parent_widget, theme: str, appearance: str):
+        buttons = parent_widget.findChildren(QPushButton)
+        button_style = cls.get_button_style(theme, appearance)
+        for button in buttons:
+            button.setStyleSheet(button_style)
 
 class UIManager:
     def __init__(self, parent):
@@ -341,18 +497,16 @@ class UIManager:
     def create_header(self) -> QWidget:
         layout = QHBoxLayout()
         header_label = QLabel(f"⚙️ {Config.APP_NAME}")
+        header_label.setStyleSheet("font-size: 22px; font-weight: bold;")
 
         try:
             icon_path = FileManager.download_icon()
-            self.setWindowIcon(QIcon(icon_path))
-            print(f"Window icon set: {icon_path}")
+            self.parent.setWindowIcon(QIcon(icon_path))
         except Exception as e:
             print(f"Failed to set window icon: {e}")
 
-        header_label.setStyleSheet("font-size: 22px; font-weight: bold;")
-        
         self.widgets['version_display'] = QLabel(f"v{self.parent.current_version}")
-        self.widgets['version_display'].setStyleSheet("font-size: 18px; font-weight: bold; color: #0a84ff;")
+        self.widgets['version_display'].setStyleSheet("font-size: 18px; font-weight: bold; color: #0078d4;")
         
         update_btn = QPushButton("🔄 Check Updates")
         update_btn.clicked.connect(self.parent.check_for_updates)
@@ -407,7 +561,7 @@ class UIManager:
     
     def create_update_tab(self) -> QWidget:
         widget = QWidget()
-        layout = QVBoxLayout(widget)
+        layout = QVBoxLayout()
         
         version_group = QGroupBox("📋 Version Information")
         v_layout = QVBoxLayout()
@@ -426,6 +580,7 @@ class UIManager:
         self.widgets['update_text'].setReadOnly(True)
         layout.addWidget(self.widgets['update_text'])
         
+        widget.setLayout(layout)
         return widget
     
     def update_version_display(self, current: str, latest: str = None):
@@ -435,8 +590,7 @@ class UIManager:
             self.widgets['current_version_label'].setText(f"Current: v{current}")
         if latest and 'latest_version_label' in self.widgets:
             self.widgets['latest_version_label'].setText(f"Latest: v{latest}")
-        
-        if hasattr(self.parent, 'tray') and self.parent.tray.tray_icon:
+        if hasattr(self.parent, 'tray') and self.parent.tray and self.parent.tray.tray_icon:
             self.parent.tray.tray_icon.setToolTip(f"{Config.APP_NAME} v{current}")
     
     def set_update_logs(self):
@@ -459,7 +613,6 @@ class SystemTrayManager:
             self.tray_icon.setContextMenu(menu)
             self.tray_icon.activated.connect(self.on_tray_activated)
             self.tray_icon.show()
-            print("System tray icon created successfully")
         except Exception as e:
             print(f"Tray setup failed: {e}")
     
@@ -487,17 +640,14 @@ class SystemTrayManager:
         return menu
     
     def on_tray_activated(self, reason):
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick or \
-           reason == QSystemTrayIcon.ActivationReason.Trigger:
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick or reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.parent.show_normal()
     
     def show_minimize_notification(self):
         if self.tray_icon:
             self.tray_icon.showMessage(
-                Config.APP_NAME,
-                f"{Config.APP_NAME} minimized to tray",
-                QSystemTrayIcon.Information,
-                2000
+                Config.APP_NAME, f"{Config.APP_NAME} minimized to tray",
+                QSystemTrayIcon.Information, 1500
             )
 
 class ClickerEngine:
@@ -510,8 +660,10 @@ class ClickerEngine:
         if self.running:
             return
         self.running = True
-        self.parent.start_btn.setEnabled(False)
-        self.parent.stop_btn.setEnabled(True)
+        if hasattr(self.parent, 'start_btn'):
+            self.parent.start_btn.setEnabled(False)
+        if hasattr(self.parent, 'stop_btn'):
+            self.parent.stop_btn.setEnabled(True)
         if 'progress_label' in self.parent.ui.widgets:
             self.parent.ui.widgets['progress_label'].setText("Cycles: 0")
         self.thread = threading.Thread(target=self._click_loop, daemon=True)
@@ -530,25 +682,18 @@ class ClickerEngine:
         try:
             settings = self._get_settings()
             cycle_count = 0
-            
-            while (self.running and 
-                   (settings['max_loops'] == 0 or cycle_count < settings['max_loops'])):
-                
+            while (self.running and (settings['max_loops'] == 0 or cycle_count < settings['max_loops'])):
                 for _ in range(settings['clicks']):
                     if not self.running:
                         break
                     pyautogui.click()
                     self.parent.log("🖱️ Clicked")
                     time.sleep(settings['click_delay'])
-                
                 cycle_count += 1
                 if 'progress_label' in self.parent.ui.widgets:
                     self.parent.ui.widgets['progress_label'].setText(f"Cycles: {cycle_count}")
                 self.parent.log(f"Cycle {cycle_count} complete")
                 time.sleep(settings['cycle_delay'])
-                
-        except ValueError as e:
-            self.parent.log(f"❌ Invalid settings: {e}")
         except Exception as e:
             self.parent.log(f"❌ Clicker error: {e}")
         finally:
@@ -556,35 +701,47 @@ class ClickerEngine:
     
     def _get_settings(self) -> Dict[str, Any]:
         widgets = self.parent.ui.widgets
+        def safe_int(widget, default):
+            try: return int(widget.text() or default)
+            except: return default
+        def safe_float(widget, default):
+            try: return float(widget.text() or default)
+            except: return default
         return {
-            'clicks': max(1, int(widgets.get('click_count', QLineEdit("1")).text() or 1)),
-            'max_loops': int(widgets.get('loop_count', QLineEdit("0")).text() or 0),
-            'click_delay': max(0.01, float(widgets.get('click_delay', QLineEdit("1")).text() or 1)),
-            'cycle_delay': max(0.01, float(widgets.get('cycle_delay', QLineEdit("0.5")).text() or 0.5))
+            'clicks': max(1, safe_int(widgets.get('click_count'), 1)),
+            'max_loops': safe_int(widgets.get('loop_count'), 0),
+            'click_delay': max(0.01, safe_float(widgets.get('click_delay'), 1.0)),
+            'cycle_delay': max(0.01, safe_float(widgets.get('cycle_delay'), 0.5))
         }
 
 class AutoClickerApp(QMainWindow):
-    def __init__(self):
+    def __init__(self, lock: SingletonLock):
         super().__init__()
+        self.lock = lock
         self.current_version = VersionManager.get_current_version()
-        print(f"Application starting with version: {self.current_version}")
+        
         self.latest_version = self.current_version
         self.update_checker = None
+        self.current_appearance = "Dark"
+        self.current_color_theme = "Blue"
         
         self.ui = UIManager(self)
         self.tray = SystemTrayManager(self)
         self.clicker = ClickerEngine(self)
+        
+        # Connect lock activation signal AFTER creating the window
+        self.lock.activation_requested.connect(self.show_normal)
         
         self._init_ui()
         self._setup_timers()
         self._setup_hotkeys()
         self.ui.set_update_logs()
         self.update_theme()
-        
+    
     def _init_ui(self):
         self.setWindowTitle(f"{Config.APP_NAME} v{self.current_version}")
         self.setFixedSize(640, 580)
-        self.setStyleSheet(Styles.get_base_style("Dark"))
+        self.setStyleSheet(Styles.get_base_style(self.current_appearance))
         
         central = QWidget()
         self.setCentralWidget(central)
@@ -597,13 +754,13 @@ class AutoClickerApp(QMainWindow):
         self._setup_controls(layout)
         
         self.ui.update_version_display(self.current_version)
+        Styles.apply_theme_to_all_buttons(self, self.current_color_theme, self.current_appearance)
     
     def _setup_tabs(self, layout):
         tabs = QTabWidget()
         
         settings_tab = QWidget()
         settings_layout = QVBoxLayout(settings_tab)
-        settings_layout.setContentsMargins(10, 10, 10, 10)
         settings_layout.addWidget(self.ui.create_click_settings())
         settings_layout.addWidget(self.ui.create_theme_settings())
         settings_layout.addStretch()
@@ -623,7 +780,6 @@ class AutoClickerApp(QMainWindow):
     
     def _setup_controls(self, layout):
         btn_layout = QHBoxLayout()
-        
         self.start_btn = QPushButton(f"▶️ Start ({Config.HOTKEY})")
         self.stop_btn = QPushButton(f"⏹️ Stop ({Config.HOTKEY})")
         self.stop_btn.setEnabled(False)
@@ -658,10 +814,8 @@ class AutoClickerApp(QMainWindow):
     def check_for_updates(self, silent: bool = False):
         if self.update_checker and self.update_checker.isRunning():
             return
-        
         if not silent:
             self.log("🔄 Checking for updates...")
-        
         self.update_checker = UpdateChecker(self.current_version)
         self.update_checker.update_available.connect(self._on_update_available)
         self.update_checker.check_completed.connect(self._on_check_completed)
@@ -671,25 +825,24 @@ class AutoClickerApp(QMainWindow):
     def check_for_updates_silent(self):
         self.check_for_updates(silent=True)
     
-    def update_theme(self):
-        if 'appearance_combo' in self.ui.widgets:
-            mode = self.ui.widgets['appearance_combo'].currentText()
-            self.setStyleSheet(Styles.get_base_style(mode))
-            self.update_color_theme()
+    def update_theme(self, appearance: str = None):
+        if appearance is None and 'appearance_combo' in self.ui.widgets:
+            appearance = self.ui.widgets['appearance_combo'].currentText()
+        self.current_appearance = appearance or "Dark"
+        self.setStyleSheet(Styles.get_base_style(self.current_appearance))
+        Styles.apply_theme_to_all_buttons(self, self.current_color_theme, self.current_appearance)
+        self.update_color_theme()
     
-    def update_color_theme(self):
-        if 'color_combo' in self.ui.widgets:
+    def update_color_theme(self, theme: str = None):
+        if theme is None and 'color_combo' in self.ui.widgets:
             theme = self.ui.widgets['color_combo'].currentText()
-            style = Styles.get_button_style(theme)
-            if hasattr(self, 'start_btn'):
-                self.start_btn.setStyleSheet(style)
+        self.current_color_theme = theme or "Blue"
+        Styles.apply_theme_to_all_buttons(self, self.current_color_theme, self.current_appearance)
     
     def log(self, message: str):
         timestamp = time.strftime("%H:%M:%S")
         self.log_text.append(f"[{timestamp}] {message}")
-        self.log_text.verticalScrollBar().setValue(
-            self.log_text.verticalScrollBar().maximum()
-        )
+        self.log_text.verticalScrollBar().setValue(self.log_text.verticalScrollBar().maximum())
     
     def _on_version_fetched(self, latest_version: str):
         self.latest_version = latest_version
@@ -709,14 +862,12 @@ class AutoClickerApp(QMainWindow):
             QMessageBox.Yes | QMessageBox.No
         )
         if reply == QMessageBox.Yes:
-            import webbrowser
             webbrowser.open(info['download_url'])
         self.log(f"🆕 Update available: v{info['version']}")
     
     def _on_check_completed(self, success: bool, message: str):
         status = "✅" if success else "ℹ️"
         self.log(f"{status} {message}")
-        FileManager.update_last_check()
     
     def show_normal(self):
         self.show()
@@ -726,14 +877,14 @@ class AutoClickerApp(QMainWindow):
     def closeEvent(self, event):
         event.ignore()
         self.hide()
-        if self.tray.tray_icon:
+        if self.tray and self.tray.tray_icon:
             self.tray.show_minimize_notification()
     
     def quit_app(self):
         self.log("👋 Shutting down...")
         if hasattr(self, 'update_timer'):
             self.update_timer.stop()
-        if self.tray.tray_icon:
+        if self.tray and self.tray.tray_icon:
             self.tray.tray_icon.hide()
         try:
             keyboard.unhook_all()
@@ -741,29 +892,74 @@ class AutoClickerApp(QMainWindow):
             pass
         QApplication.quit()
 
-def main():
-    """Application entry point"""
-    FileManager.ensure_app_directory()
-    
-    # Create QApplication FIRST - required for QIcon/QPixmap
-    app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)
-    
-    # Now download and set icon after QApplication is created
-    try:
-        icon_path = FileManager.download_icon()
-        app_icon = QIcon(icon_path)
-        if not app_icon.isNull():
-            app.setWindowIcon(app_icon)
-            print(f"Global application icon set: {icon_path}")
-        else:
-            print("Warning: Loaded icon is null/invalid")
-    except Exception as e:
-        print(f"Could not set global app icon: {e}")
-    
-    window = AutoClickerApp()
-    window.show()
-    sys.exit(app.exec())
+class initializer:
+    def __init__(self):
+        super().__init__()
+        pass
+
+    def activate_existing_instance(self, lockfile_path: Path):
+        """Attempt to activate existing instance using port from lockfile"""
+        try:
+            port = None
+            if lockfile_path.exists():
+                try:
+                    port = int(lockfile_path.read_text().strip())
+                except (ValueError, OSError):
+                    return False
+            if not port:
+                return False
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.5)
+            sock.connect(('127.0.0.1', port))
+            sock.send(b"ACTIVATE")
+            sock.close()
+            return True
+        except Exception:
+            return False
+
+    def run(self):
+        """Application entry point with singleton enforcement"""
+        FileManager.ensure_app_directory()
+        
+        lock = SingletonLock()
+        
+        with lock.acquire() as acquired_lock:
+            if acquired_lock is None:
+                print("Another instance detected")
+                reply = QMessageBox.question(
+                    None, "Instance Already Running",
+                    "Sigma Auto Clicker is already running.\nActivate existing instance?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if reply == QMessageBox.Yes:
+                    if self.activate_existing_instance(lock.lockfile_path):
+                        print("Activation signal sent")
+                    else:
+                        QMessageBox.warning(
+                            None,
+                            "Error", 
+                            "Could not activate existing instance"
+                        )
+                sys.exit(0)
+        
+        app = QApplication(sys.argv)
+        app.setQuitOnLastWindowClosed(False)
+        app.setApplicationName(Config.APP_NAME)
+        app.setOrganizationName("MrAndiGamesDev")
+        
+        try:
+            icon_path = FileManager.download_icon()
+            app_icon = QIcon(icon_path)
+            if not app_icon.isNull():
+                app.setWindowIcon(app_icon)
+            
+            window = AutoClickerApp(lock)
+            window.show()
+            sys.exit(app.exec())
+        except Exception as e:
+            print(f"Application error: {e}")
+            sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    Appinitializer = initializer()
+    Appinitializer.run()
