@@ -7,4 +7,5 @@ PyInstaller
 colorama
 requests
 psutil
+pynput
 pytest
