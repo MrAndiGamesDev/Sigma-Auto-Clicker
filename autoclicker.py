@@ -27,7 +27,6 @@ pyautogui.FAILSAFE = False
 
 class SingletonLock(QObject):
     """Manages singleton application lock using TCP socket on localhost"""
-    
     activation_requested = pyqtSignal()
     
     def __init__(self, lock_port: int = 49513):
