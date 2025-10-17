@@ -65,7 +65,6 @@ class Config:
 
 class OSCompatibilityChecker:
     """Comprehensive OS compatibility and requirements checker"""
-    
     SUPPORTED_PLATFORMS = {
         "Windows": {
             "min_version": "10.0",
@@ -1180,46 +1179,42 @@ class initializer:
 
     def run(self):
         """Application entry point with singleton enforcement"""
-        try:
-            memory = psutil.virtual_memory()
-            memory_is_available = memory.available < 256 * 1024 * 1024 # Less than 256MB
-            if memory_is_available:
-                print("Warning: Low memory available")
-        except ImportError:
-            print("psutil not available, skipping resource check")
-
         FileManager.ensure_app_directory()
-        lock = SingletonLock()
-
-        with lock.acquire() as acquired_lock:
-            if acquired_lock is None:
-                print("Another instance detected")
-                reply = QMessageBox.question(
-                    None, "Instance Already Running",
-                    "Sigma Auto Clicker is already running.\nActivate existing instance?",
-                    QMessageBox.Yes | QMessageBox.No
-                )
-                if reply == QMessageBox.Yes:
-                    if self.activate_existing_instance(lock.lockfile_path):
-                        print("Activation signal sent")
-                    else:
-                        QMessageBox.warning(
-                            None,
-                            "Error", 
-                            "Could not activate existing instance"
-                        )
-                sys.exit(0)
-        
         app = QApplication(sys.argv)
         app.setQuitOnLastWindowClosed(False)
         app.setApplicationName(Config.APP_NAME)
         app.setOrganizationName(Config.AUTHORNAME)
-        
         try:
+            try:
+                memory = psutil.virtual_memory()
+                memory_is_available = memory.available < 256 * 1024 * 1024 # Less than 256MB
+                if memory_is_available:
+                    print("Warning: Low memory available")
+            except ImportError:
+                print("psutil not available, skipping resource check")
             icon_path = FileManager.download_icon()
             app_icon = QIcon(icon_path)
             if not app_icon.isNull():
                 app.setWindowIcon(app_icon)
+            lock = SingletonLock()
+            with lock.acquire() as acquired_lock:
+                if acquired_lock is None:
+                    print("Another instance detected")
+                    reply = QMessageBox.question(
+                        None, "Instance Already Running",
+                        "Sigma Auto Clicker is already running.\nActivate existing instance?",
+                        QMessageBox.Yes | QMessageBox.No
+                    )
+                    if reply == QMessageBox.Yes:
+                        if self.activate_existing_instance(lock.lockfile_path):
+                            print("Activation signal sent")
+                        else:
+                            QMessageBox.warning(
+                                None,
+                                "Error", 
+                                "Could not activate existing instance"
+                            )
+                    sys.exit(0)
             window = AutoClickerApp(lock)
             window.show()
             sys.exit(app.exec())
