@@ -59,6 +59,7 @@ class VirtualEnvManager:
                 f"Virtual environment activated at {self.venv_path}",
                 "Failed to activate virtual environment"
             )
+            
         return self._run_subprocess(
             ["bash", "-c", f"source {self.activate_script}"],
             f"Virtual environment activated at {self.venv_path}",
@@ -90,21 +91,21 @@ class VirtualEnvManager:
             return False
         return True
 
-    def exit_script(self, duration, lvl=1):
+    def exit_script(self, duration: int, lvl=1):
         """Exit the script with a message."""
         logger.info("Exiting script.")
         sleep(duration)
         sys.exit(lvl)
 
-def run():
+def run(duration: int):
     """Main entry point for the script."""
     try:
         venv_manager = VirtualEnvManager("AutoClickerPy")
         if not venv_manager.manage_venv():
-            venv_manager.exit_script(2)
+            venv_manager.exit_script(duration)
     except Exception as e:
         logger.error(f"Unexpected error in main: {e}")
-        venv_manager.exit_script(2)
+        venv_manager.exit_script(duration)
 
 if __name__ == "__main__":
-    run()
+    run(2)  # Adjust duration as needed
