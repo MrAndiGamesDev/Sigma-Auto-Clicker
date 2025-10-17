@@ -943,7 +943,7 @@ class initializer:
         app = QApplication(sys.argv)
         app.setQuitOnLastWindowClosed(False)
         app.setApplicationName(Config.APP_NAME)
-        app.setOrganizationName("MrAndiGamesDev")
+        app.setOrganizationName(Config.AUTHORNAME)
         
         try:
             icon_path = FileManager.download_icon()
