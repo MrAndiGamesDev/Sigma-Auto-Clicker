@@ -86,7 +86,7 @@ class OSCompatibilityChecker:
             "accessibility_needed": True
         },
         "Linux": {
-            "min_version": "5.4",
+            "min_version": "6.1.1",
             "required_libs": ["pyautogui", "keyboard", "requests", "PySide6", "psutil"],
             "system_tray": True,  # Depends on desktop environment
             "hotkeys": True,
