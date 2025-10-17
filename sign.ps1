@@ -12,7 +12,7 @@ $thumbprint = $null
 $existingCert = Get-ChildItem -Path Cert:\CurrentUser\My | Where-Object { $_.Subject -eq "CN=$Authername" }
 
 $version = Get-Content -Path "VERSION.txt"
-$targetexe = "Sigma Auto Clicker ($version)"
+$targetexe = "Sigma Auto Clicker (v$version)"
 
 if ($existingCert) {
     Write-Host "Certificate for '$Authername' already exists in certificate store." -ForegroundColor Yellow
@@ -56,4 +56,5 @@ try {
 
 Write-Host "`nCertificate creation completed successfully!" -ForegroundColor Green
 Write-Host "To use this certificate for signing:" -ForegroundColor Cyan
+
 Write-Host "Set-AuthenticodeSignature -FilePath '$targetexe.exe' -Certificate (Get-ChildItem Cert:\CurrentUser\My\$($cert.Thumbprint))" -ForegroundColor White
