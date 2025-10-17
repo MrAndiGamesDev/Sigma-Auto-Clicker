@@ -44,7 +44,7 @@ class PyInstallerBuilder:
         version = self.load_version("VERSION.txt")
         if version:
             # Create safe filename by replacing invalid characters
-            safe_name = "".join(c for c in f"Sigma Auto Clicker ({version})" 
+            safe_name = "".join(c for c in f"Sigma Auto Clicker (v{version})" 
                             if c.isalnum() or c in (' ', '-', '_')).rstrip()
             safe_name = safe_name.replace(' ', '_').replace('(', '').replace(')', '')
             possible_spec_names.append(f"{safe_name}.spec")
@@ -102,7 +102,7 @@ class PyInstallerBuilder:
         sleep(2)
         
         version = self.load_version("VERSION.txt")
-        executable_name = f"Sigma Auto Clicker ({version})" if version else "Sigma Auto Clicker"
+        executable_name = f"Sigma Auto Clicker (v{version})" if version else "Sigma Auto Clicker"
         
         try:
             pyinstaller_args = [
