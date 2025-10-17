@@ -2,8 +2,9 @@ keyboard
 mouse
 Pillow
 pyautogui
-customtkinter
+PySide6
 PyInstaller
 colorama
 requests
+psutil
 pytest
