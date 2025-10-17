@@ -13,13 +13,13 @@ import psutil
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any, Callable
+from typing import Optional, Dict, Any
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QLineEdit, QPushButton,
-    QTabWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTextEdit, QFileDialog,
-    QComboBox, QSystemTrayIcon, QMenu, QFormLayout, QMessageBox, QDialog, QDialogButtonBox
+    QTabWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTextEdit,
+    QComboBox, QSystemTrayIcon, QMenu, QFormLayout, QMessageBox, QDialog
 )
-from PySide6.QtGui import QIcon, QAction, QColor, QFont
+from PySide6.QtGui import QIcon, QAction
 from PySide6.QtCore import Qt, QTimer, QThread, Signal as pyqtSignal, QObject
 
 # PyAutoGUI settings
@@ -55,6 +55,7 @@ class Config:
     LOCK_FILE = APPDATA_DIR / f"app.lock.{LOCK_PORT}"
     
     UPDATE_LOGS = [
+        "2025-10-18: Small Update Improvements much more!",
         "2025-10-17: UI Improvements and Bug Fixes and much more!",
         "2025-10-16: Fixed app bugs! and much more (part 3)",
         "2025-10-16: Fixed An Update Management Bug and much more! (part 2)",
@@ -68,7 +69,7 @@ class OSCompatibilityChecker:
     """Comprehensive OS compatibility and requirements checker"""
     SUPPORTED_PLATFORMS = {
         "Windows": {
-            "min_version": "10.0",
+            "min_version": "10",
             "required_libs": ["pyautogui", "keyboard", "requests", "PySide6", "psutil"],
             "system_tray": True,
             "hotkeys": True,
@@ -85,7 +86,7 @@ class OSCompatibilityChecker:
             "accessibility_needed": True
         },
         "Linux": {
-            "min_version": "5.4",
+            "min_version": "6.1.1",
             "required_libs": ["pyautogui", "keyboard", "requests", "PySide6", "psutil"],
             "system_tray": True,  # Depends on desktop environment
             "hotkeys": True,
@@ -257,7 +258,7 @@ class OSCompatibilityChecker:
             pyautogui.FAILSAFE = False
             pyautogui.PAUSE = 0
             # Just check if it can be imported and basic position works
-            pos = pyautogui.position()
+            pyautogui.position()
             return True
         except Exception:
             return False
@@ -272,12 +273,13 @@ class OSCompatibilityChecker:
             # Basic resource checks
             if cpu_percent > 90:
                 return False
+            
             if memory.available < 512 * 1024 * 1024:  # Less than 512MB free
                 return False
             
             return True
         except:
-            return True  # Assume OK if can't check
+            return True # Assume OK if can't check
     
     @classmethod
     def show_compatibility_dialog(cls, check_result: Dict[str, Any]):
@@ -337,22 +339,17 @@ class InstanceDialog(QDialog):
         
         # Custom buttons
         button_layout = QHBoxLayout()
-        
-        self.yes_btn = QPushButton("👁️ Bring to Front")
         self.no_btn = QPushButton("🚪 Exit")
         self.force_btn = QPushButton("⚠️ Force New Instance")
         
         # Style buttons
-        self.yes_btn.setStyleSheet("QPushButton { background-color: #4caf50; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-weight: bold; } QPushButton:hover { background-color: #45a049; }")
         self.no_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-weight: bold; } QPushButton:hover { background-color: #da190b; }")
         self.force_btn.setStyleSheet("QPushButton { background-color: #ff9800; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-weight: bold; } QPushButton:hover { background-color: #e68900; }")
         
         # Connect signals
-        self.yes_btn.clicked.connect(self.accept)
         self.no_btn.clicked.connect(self.reject)
         self.force_btn.clicked.connect(self._force_new)
         
-        button_layout.addWidget(self.yes_btn)
         button_layout.addWidget(self.force_btn)
         button_layout.addWidget(self.no_btn)
         button_layout.addStretch()
@@ -363,8 +360,8 @@ class InstanceDialog(QDialog):
     def _force_new(self):
         """Handle force new instance"""
         reply = QMessageBox.warning(
-            self, "⚠️ Warning", 
-            "Running multiple instances may cause conflicts and instability!\n\nContinue anyway?",
+            self, "Warning", 
+            "Running multiple instances may cause conflicts and instability!\n\nWould You Like To Continue anyway?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -878,7 +875,7 @@ class UIManager:
         except Exception as e:
             print(f"Failed to set window icon: {e}")
 
-        self.widgets['version_display'] = QLabel(f"v{self.parent.current_version}")
+        self.widgets['version_display'] = QLabel(f"(v{self.parent.current_version})")
         self.widgets['version_display'].setStyleSheet("font-size: 18px; font-weight: bold; color: #0078d4;")
         
         update_btn = QPushButton("🔄 Check Updates")
@@ -967,7 +964,7 @@ class UIManager:
             self.widgets['latest_version_label'].setText(f"Latest: v{latest}")
 
         if hasattr(self.parent, 'tray') and self.parent.tray and self.parent.tray.tray_icon:
-            self.parent.tray.tray_icon.setToolTip(f"{Config.APP_NAME} v{current}")
+            self.parent.tray.tray_icon.setToolTip(f"{Config.APP_NAME} (v{current})")
     
     def set_update_logs(self):
         if 'update_text' in self.widgets:
@@ -994,7 +991,7 @@ class SystemTrayManager:
     
     def update_tooltip(self):
         if self.tray_icon:
-            self.tray_icon.setToolTip(f"{Config.APP_NAME} v{self.parent.current_version}")
+            self.tray_icon.setToolTip(f"{Config.APP_NAME} (v{self.parent.current_version})")
     
     def create_tray_menu(self) -> QMenu:
         menu = QMenu()
@@ -1022,8 +1019,8 @@ class SystemTrayManager:
     def show_minimize_notification(self):
         if self.tray_icon:
             self.tray_icon.showMessage(
-                Config.APP_NAME, f"{Config.APP_NAME} just minimized to tray!",
-                QSystemTrayIcon.Information, 1500
+                Config.APP_NAME, f"just minimized to tray!",
+                QSystemTrayIcon.Information, 1000
             )
 
 class ClickerEngine:
@@ -1115,7 +1112,7 @@ class AutoClickerApp(QMainWindow):
         self.update_theme()
     
     def _init_ui(self):
-        self.setWindowTitle(f"{Config.APP_NAME} v{self.current_version}")
+        self.setWindowTitle(f"{Config.APP_NAME} (v{self.current_version})")
         self.setFixedSize(640, 580)
         self.setStyleSheet(Styles.get_base_style(self.current_appearance))
         
