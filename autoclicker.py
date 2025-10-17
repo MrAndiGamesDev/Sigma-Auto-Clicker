@@ -1180,8 +1180,17 @@ class initializer:
 
     def run(self):
         """Application entry point with singleton enforcement"""
+        try:
+            memory = psutil.virtual_memory()
+            memory_is_available = memory.available < 256 * 1024 * 1024 # Less than 256MB
+            if memory_is_available:
+                print("Warning: Low memory available")
+        except ImportError:
+            print("psutil not available, skipping resource check")
+
         FileManager.ensure_app_directory()
         lock = SingletonLock()
+
         with lock.acquire() as acquired_lock:
             if acquired_lock is None:
                 print("Another instance detected")
@@ -1219,11 +1228,5 @@ class initializer:
             sys.exit(1)
 
 if __name__ == "__main__":
-    try:
-        memory = psutil.virtual_memory()
-        if memory.available < 256 * 1024 * 1024:  # Less than 256MB
-            print("Warning: Low memory available")
-    except ImportError:
-        print("psutil not available, skipping resource check")
     Appinitializer = initializer()
     Appinitializer.run()
