@@ -5,7 +5,7 @@ REM ================================
 SET PFX_FILE=certificate.pfx
 SET PFX_PASSWORD=
 SET /P VERSION=<version.txt
-SET FILE_TO_SIGN=.\Sigma Auto Clicker (%VERSION%).exe
+SET FILE_TO_SIGN=.\Sigma Auto Clicker (v%VERSION%).exe
 SET TIMESTAMP_URL=http://timestamp.digicert.com
 
 REM ================================
@@ -21,5 +21,6 @@ IF %ERRORLEVEL% EQU 0 (
 ) ELSE (
     ECHO Signing failed with error code %ERRORLEVEL%.
 )
+
 
 PAUSE
