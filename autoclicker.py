@@ -9,10 +9,12 @@ import webbrowser
 import pyautogui
 import keyboard
 import socket
+import psutil
+import os
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, Callable
-from contextlib import contextmanager
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QLineEdit, QPushButton,
     QTabWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTextEdit, QFileDialog,
@@ -24,6 +26,283 @@ from PySide6.QtCore import Qt, QTimer, QThread, Signal as pyqtSignal, QObject
 # PyAutoGUI settings
 pyautogui.PAUSE = 0
 pyautogui.FAILSAFE = False
+
+class Config:
+    """Application configuration constants"""
+    APP_NAME = "Sigma Auto Clicker"
+    HOTKEY = "Ctrl+F"
+    AUTHORNAME = "MrAndiGamesDev"
+    ICON_URL = f"https://raw.githubusercontent.com/{AUTHORNAME}/My-App-Icons/main/mousepointer.ico"
+    GITHUB_REPO = f"{AUTHORNAME}/Sigma-Auto-Clicker"
+    UPDATE_CHECK_INTERVAL = 24 * 60 * 60 * 1000
+    DEFAULT_VERSION = "1.0.0"
+
+    PORTS = "127.0.0.1"
+
+    SYSTEM = platform.system()
+    HOME_DIR = Path.home()
+
+    APPDATA_DIR = (
+        HOME_DIR / "AppData" / "Roaming" / "SigmaAutoClicker" 
+        if SYSTEM == "Windows" else HOME_DIR / ".sigma_autoclicker"
+    )
+    
+    # File paths
+    APP_ICON = APPDATA_DIR / "mousepointer.ico"
+    UPDATE_CHECK_FILE = APPDATA_DIR / "last_update_check.txt"
+    VERSION_FILE = APPDATA_DIR / "current_version.txt"
+    VERSION_CACHE_FILE = APPDATA_DIR / "version_cache.txt"
+    
+    UPDATE_LOGS = [
+        "2025-10-18: UI Improvements and Bug Fixes and much more!",
+        "2025-10-16: Fixed app bugs! and much more (part 3)",
+        "2025-10-16: Fixed An Update Management Bug and much more! (part 2)",
+        "2025-10-16: Added automatic update checking Version management UI/Code improvements UI Improvements And Much More!",
+        "2025-10-15: Fixed Light Mode support and UI improvements",
+        "2025-10-14: Added Update Logs tab and color themes",
+        "2025-10-13: Initial release"
+    ]
+
+class OSCompatibilityChecker:
+    """Comprehensive OS compatibility and requirements checker"""
+    
+    SUPPORTED_PLATFORMS = {
+        "Windows": {
+            "min_version": "10.0",
+            "required_libs": ["pyautogui", "keyboard", "requests", "PySide6", "psutil"],
+            "system_tray": True,
+            "hotkeys": True,
+            "pyautogui": True,
+            "admin_warning": False
+        },
+        "Darwin": {  # macOS
+            "min_version": "10.15",
+            "required_libs": ["pyautogui", "keyboard", "requests", "PySide6", "psutil"],
+            "system_tray": True,
+            "hotkeys": True,
+            "pyautogui": True,
+            "admin_warning": True,  # macOS requires accessibility permissions
+            "accessibility_needed": True
+        },
+        "Linux": {
+            "min_version": "5.4",
+            "required_libs": ["pyautogui", "keyboard", "requests", "PySide6", "psutil"],
+            "system_tray": True,  # Depends on desktop environment
+            "hotkeys": True,
+            "pyautogui": True,
+            "admin_warning": False,
+            "x11_warning": True  # May need X11 forwarding or Wayland compatibility
+        }
+    }
+    
+    @classmethod
+    def check_compatibility(cls) -> Dict[str, Any]:
+        """Perform comprehensive OS compatibility check"""
+        system = platform.system()
+        release = platform.release()
+        version = platform.version()
+        machine = platform.machine()
+        
+        result = {
+            "system": system,
+            "release": release,
+            "version": version,
+            "machine": machine,
+            "compatible": False,
+            "warnings": [],
+            "errors": [],
+            "features": {}
+        }
+        
+        # Check if platform is supported
+        if system not in cls.SUPPORTED_PLATFORMS:
+            result["errors"].append(f"Unsupported OS: {system}")
+            return result
+        
+        platform_config = cls.SUPPORTED_PLATFORMS[system]
+        result["features"] = platform_config
+        
+        # Version check
+        if not cls._check_version(system, release, platform_config.get("min_version")):
+            result["errors"].append(f"OS version too old. Requires {platform_config['min_version']}+")
+        
+        # Library checks
+        missing_libs = cls._check_libraries(platform_config["required_libs"])
+        if missing_libs:
+            result["errors"].extend([f"Missing library: {lib}" for lib in missing_libs])
+        
+        # Admin/permissions check
+        if platform_config.get("admin_warning", False):
+            if not cls._is_admin_or_elevated():
+                result["warnings"].append("Administrator privileges may be required for full functionality")
+        
+        # macOS accessibility
+        if system == "Darwin" and platform_config.get("accessibility_needed", False):
+            if not cls._check_macos_accessibility():
+                result["warnings"].append("System Preferences > Security & Privacy > Accessibility permissions required")
+        
+        # Linux X11/Wayland check
+        if system == "Linux":
+            if not cls._check_linux_display():
+                result["warnings"].append("X11 display server required for GUI automation")
+        
+        # PyAutoGUI specific checks
+        if platform_config.get("pyautogui", False):
+            if not cls._check_pyautogui_support():
+                result["errors"].append("PyAutoGUI not supported on this system configuration")
+        
+        # System resources check
+        if not cls._check_system_resources():
+            result["warnings"].append("Low system resources detected - performance may be affected")
+        
+        result["compatible"] = len(result["errors"]) == 0
+        return result
+    
+    @staticmethod
+    def _check_version(system: str, release: str, min_version: str) -> bool:
+        """Check if OS version meets minimum requirements"""
+        try:
+            if system == "Windows":
+                # Windows version check using win32api or platform
+                import sys
+                if hasattr(sys, 'getwindowsversion'):
+                    win_ver = sys.getwindowsversion()
+                    major = win_ver.major
+                    minor = win_ver.minor
+                    return (major > 10) or (major == 10 and minor >= 0)
+                return True  # Fallback
+            elif system == "Darwin":
+                # macOS version check
+                import plistlib
+                try:
+                    with open('/System/Library/CoreServices/SystemVersion.plist', 'rb') as f:
+                        info = plistlib.load(f)
+                        major = int(info['ProductVersion'].split('.')[0])
+                        minor = int(info['ProductVersion'].split('.')[1])
+                        return (major > 10) or (major == 10 and minor >= 15)
+                except:
+                    return True  # Fallback
+            else:  # Linux
+                # Kernel version check
+                kernel_parts = release.split('.')
+                if len(kernel_parts) >= 2:
+                    major = int(kernel_parts[0])
+                    minor = int(kernel_parts[1])
+                    return (major > 5) or (major == 5 and minor >= 4)
+                return True
+        except:
+            return True  # Fallback to allow running
+    
+    @staticmethod
+    def _check_libraries(required_libs: list) -> list:
+        """Check if required Python libraries are installed"""
+        missing = []
+        for lib in required_libs:
+            try:
+                if lib == "psutil":
+                    import psutil
+                elif lib == "PySide6":
+                    import PySide6
+                else:
+                    __import__(lib)
+            except ImportError:
+                missing.append(lib)
+        return missing
+    
+    @staticmethod
+    def _is_admin_or_elevated() -> bool:
+        """Check if running with administrator privileges"""
+        try:
+            if platform.system() == "Windows":
+                try:
+                    import ctypes
+                    return ctypes.windll.shell32.IsUserAnAdmin()
+                except:
+                    pass
+            elif platform.system() == "Darwin":
+                # macOS check
+                return os.geteuid() == 0
+            else:  # Linux
+                return os.geteuid() == 0
+        except:
+            return False
+    
+    @staticmethod
+    def _check_macos_accessibility() -> bool:
+        """Check macOS accessibility permissions"""
+        try:
+            # This is a simplified check - actual verification requires AppleScript or checking permissions database
+            result = subprocess.run(
+                ['osascript', '-e', 'tell application "System Events" to get name of every process'],
+                capture_output=True, text=True, timeout=5
+            )
+            return result.returncode == 0
+        except:
+            return False
+    
+    @staticmethod
+    def _check_linux_display() -> bool:
+        """Check if Linux has display server available"""
+        try:
+            display = os.environ.get('DISPLAY')
+            wayland = os.environ.get('WAYLAND_DISPLAY')
+            return bool(display or wayland)
+        except:
+            return False
+    
+    @staticmethod
+    def _check_pyautogui_support() -> bool:
+        """Check PyAutoGUI compatibility"""
+        try:
+            # Test basic PyAutoGUI functionality
+            pyautogui.FAILSAFE = False
+            pyautogui.PAUSE = 0
+            # Just check if it can be imported and basic position works
+            pos = pyautogui.position()
+            return True
+        except Exception:
+            return False
+    
+    @staticmethod
+    def _check_system_resources() -> bool:
+        """Check minimum system resources"""
+        try:
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            memory = psutil.virtual_memory()
+            
+            # Basic resource checks
+            if cpu_percent > 90:
+                return False
+            if memory.available < 512 * 1024 * 1024:  # Less than 512MB free
+                return False
+            
+            return True
+        except:
+            return True  # Assume OK if can't check
+    
+    @classmethod
+    def show_compatibility_dialog(cls, check_result: Dict[str, Any]):
+        """Show compatibility dialog to user"""
+        if check_result["compatible"]:
+            if check_result["warnings"]:
+                QMessageBox.warning(
+                    None, "Compatibility Notice",
+                    f"{check_result['system']} detected with warnings:\n\n" +
+                    "\n".join(check_result["warnings"]) +
+                    "\n\nApplication will run but some features may be limited."
+                )
+        else:
+            error_msg = "System Compatibility Issues:\n\n"
+            for error in check_result["errors"]:
+                error_msg += f"• {error}\n"
+            error_msg += "\nPlease update your system or install missing dependencies."
+            
+            reply = QMessageBox.critical(
+                None, "Incompatible System", error_msg,
+                QMessageBox.Ok | QMessageBox.Cancel
+            )
+            if reply == QMessageBox.Cancel:
+                sys.exit(1)
 
 class SingletonLock(QObject):
     """Manages singleton application lock using TCP socket on localhost"""
@@ -44,7 +323,6 @@ class SingletonLock(QObject):
         if sock is None:
             yield None  # Another instance running
             return
-            
         try:
             self.socket = sock
             self._write_port_file()
@@ -60,7 +338,6 @@ class SingletonLock(QObject):
         if port:
             if self._try_connect_to_existing(port):
                 return None  # Existing instance found
-        
         # Try to bind to port directly (will fail if another instance is using it)
         return self._create_lock()
     
@@ -69,7 +346,7 @@ class SingletonLock(QObject):
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(0.1)
-            sock.connect(('127.0.0.1', port))
+            sock.connect((Config.PORTS, port))
             sock.close()
             return True
         except (ConnectionRefusedError, socket.timeout, OSError):
@@ -81,7 +358,7 @@ class SingletonLock(QObject):
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind(('127.0.0.1', self.lock_port))
+            sock.bind((Config.PORTS, self.lock_port))
             sock.listen(5)
             return sock
         except OSError as e:
@@ -101,8 +378,11 @@ class SingletonLock(QObject):
             # Hide on Windows
             if Config.SYSTEM == "Windows":
                 try:
-                    subprocess.run(["attrib", "+H", str(self.lockfile_path)], 
-                                 capture_output=True, check=True)
+                    subprocess.run(
+                        ["attrib", "+H", str(self.lockfile_path)], 
+                        capture_output=True,
+                        check=True
+                    )
                 except subprocess.CalledProcessError:
                     pass
         except Exception as e:
@@ -133,8 +413,7 @@ class SingletonLock(QObject):
                         try:
                             data = client_sock.recv(1024)
                             if data == b"ACTIVATE":
-                                # Emit signal to main thread
-                                self.activation_requested.emit()
+                                self.activation_requested.emit() # Emit signal to main thread
                         finally:
                             client_sock.close()
                     except socket.timeout:
@@ -161,39 +440,6 @@ class SingletonLock(QObject):
         except:
             pass
 
-class Config:
-    """Application configuration constants"""
-    APP_NAME = "Sigma Auto Clicker"
-    HOTKEY = "Ctrl+F"
-    AUTHORNAME = "MrAndiGamesDev"
-    ICON_URL = f"https://raw.githubusercontent.com/{AUTHORNAME}/My-App-Icons/main/mousepointer.ico"
-    GITHUB_REPO = f"{AUTHORNAME}/Sigma-Auto-Clicker"
-    UPDATE_CHECK_INTERVAL = 24 * 60 * 60 * 1000
-    DEFAULT_VERSION = "1.0.0"
-    SYSTEM = platform.system()
-    HOME_DIR = Path.home()
-
-    APPDATA_DIR = (
-        HOME_DIR / "AppData" / "Roaming" / "SigmaAutoClicker" 
-        if SYSTEM == "Windows" else HOME_DIR / ".sigma_autoclicker"
-    )
-    
-    # File paths
-    APP_ICON = APPDATA_DIR / "mousepointer.ico"
-    UPDATE_CHECK_FILE = APPDATA_DIR / "last_update_check.txt"
-    VERSION_FILE = APPDATA_DIR / "current_version.txt"
-    VERSION_CACHE_FILE = APPDATA_DIR / "version_cache.txt"
-    
-    UPDATE_LOGS = [
-        "2025-10-18: UI/Scripts Improvements and Bug Fixes and much more!",
-        "2025-10-16: Fixed app bugs! and much more (part 3)",
-        "2025-10-16: Fixed An Update Management Bug and much more! (part 2)",
-        "2025-10-16: Added automatic update checking Version management UI/Code improvements UI Improvements And Much More!",
-        "2025-10-15: Fixed Light Mode support and UI improvements",
-        "2025-10-14: Added Update Logs tab and color themes",
-        "2025-10-13: Initial release"
-    ]
-
 class FileManager:
     """Handles file operations and persistence"""
     @staticmethod
@@ -201,8 +447,11 @@ class FileManager:
         Config.APPDATA_DIR.mkdir(parents=True, exist_ok=True)
         if Config.SYSTEM == "Windows":
             try:
-                subprocess.run(["attrib", "+H", str(Config.APPDATA_DIR)], 
-                             capture_output=True, check=True)
+                subprocess.run(
+                    ["attrib", "+H", str(Config.APPDATA_DIR)], 
+                    capture_output=True,
+                    check=True
+                )
             except subprocess.CalledProcessError:
                 pass
     
@@ -213,8 +462,11 @@ class FileManager:
             try:
                 urllib.request.urlretrieve(Config.ICON_URL, Config.APP_ICON)
                 if Config.SYSTEM == "Windows":
-                    subprocess.run(["attrib", "+H", str(Config.APP_ICON)], 
-                                 capture_output=True, check=True)
+                    subprocess.run(
+                        ["attrib","+H",str(Config.APP_ICON)], 
+                        capture_output=True,
+                        check=True
+                    )
             except Exception as e:
                 print(f"Failed to download icon: {e}")
                 Config.APP_ICON.touch()
@@ -290,13 +542,10 @@ class VersionManager:
             }
             url = f"https://api.github.com/repos/{Config.GITHUB_REPO}/releases/latest"
             print(f"Fetching latest release from: {url}")
-            
             response = requests.get(url, headers=headers, timeout=10)
-            
             if response.status_code == 200:
                 data = response.json()
                 print(f"GitHub API response received: {data.get('tag_name', 'No tag')}")
-                
                 if 'tag_name' in data and data['tag_name']:
                     version = data['tag_name'].lstrip('v')
                     return {
@@ -372,9 +621,7 @@ class UpdateChecker(QThread):
             print("Starting update check...")
             release_info = VersionManager.fetch_latest_release()
             latest_version = release_info.get('version', self.current_version)
-            
             self.version_fetched.emit(latest_version)
-            
             if release_info.get('success', False):
                 if VersionManager.is_newer_version(latest_version, self.current_version):
                     self.update_available.emit(release_info)
@@ -428,7 +675,21 @@ class Styles:
         "Red": {"base": "#d13438", "hover": "#a52a2e"},
         "Orange": {"base": "#d24726", "hover": "#a63d1f"},
         "Purple": {"base": "#701cb8", "hover": "#5a1699"},
-        "Teal": {"base": "#00838f", "hover": "#006d77"}
+        "Teal": {"base": "#00838f", "hover": "#006d77"},
+        "Pink": {"base": "#e91e63", "hover": "#c2185b"},
+        "Indigo": {"base": "#3f51b5", "hover": "#303f9f"},
+        "Amber": {"base": "#ff9800", "hover": "#f57c00"},
+        "Cyan": {"base": "#00bcd4", "hover": "#00acc1"},
+        "Lime": {"base": "#cddc39", "hover": "#c0ca33"},
+        "DeepPurple": {"base": "#9c27b0", "hover": "#8e24aa"},
+        "Brown": {"base": "#795548", "hover": "#5d4037"},
+        "Grey": {"base": "#9e9e9e", "hover": "#757575"},
+        "Magenta": {"base": "#e91e63", "hover": "#ad1457"},
+        "Gold": {"base": "#ffd700", "hover": "#ffb300"},
+        "Turquoise": {"base": "#26c6da", "hover": "#00bcd4"},
+        "Coral": {"base": "#ff7f50", "hover": "#ff6b35"},
+        "Mint": {"base": "#98fb98", "hover": "#7cfc00"},
+        "Lavender": {"base": "#e6e6fa", "hover": "#d8bfd8"}
     }
     
     @classmethod
@@ -583,10 +844,13 @@ class UIManager:
     def update_version_display(self, current: str, latest: str = None):
         if 'version_display' in self.widgets:
             self.widgets['version_display'].setText(f"v{current}")
+
         if 'current_version_label' in self.widgets:
             self.widgets['current_version_label'].setText(f"Current: v{current}")
+
         if latest and 'latest_version_label' in self.widgets:
             self.widgets['latest_version_label'].setText(f"Latest: v{latest}")
+
         if hasattr(self.parent, 'tray') and self.parent.tray and self.parent.tray.tray_icon:
             self.parent.tray.tray_icon.setToolTip(f"{Config.APP_NAME} v{current}")
     
@@ -643,7 +907,7 @@ class SystemTrayManager:
     def show_minimize_notification(self):
         if self.tray_icon:
             self.tray_icon.showMessage(
-                Config.APP_NAME, f"{Config.APP_NAME} minimized to tray",
+                Config.APP_NAME, f"{Config.APP_NAME} just minimized to tray!",
                 QSystemTrayIcon.Information, 1500
             )
 
@@ -885,9 +1149,9 @@ class AutoClickerApp(QMainWindow):
             self.tray.tray_icon.hide()
         try:
             keyboard.unhook_all()
+            QApplication.quit()
         except:
             pass
-        QApplication.quit()
 
 class initializer:
     def __init__(self):
@@ -907,7 +1171,7 @@ class initializer:
                 return False
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(0.5)
-            sock.connect(('127.0.0.1', port))
+            sock.connect((Config.PORTS, port))
             sock.send(b"ACTIVATE")
             sock.close()
             return True
@@ -917,9 +1181,7 @@ class initializer:
     def run(self):
         """Application entry point with singleton enforcement"""
         FileManager.ensure_app_directory()
-        
         lock = SingletonLock()
-        
         with lock.acquire() as acquired_lock:
             if acquired_lock is None:
                 print("Another instance detected")
@@ -949,7 +1211,6 @@ class initializer:
             app_icon = QIcon(icon_path)
             if not app_icon.isNull():
                 app.setWindowIcon(app_icon)
-            
             window = AutoClickerApp(lock)
             window.show()
             sys.exit(app.exec())
@@ -958,5 +1219,11 @@ class initializer:
             sys.exit(1)
 
 if __name__ == "__main__":
+    try:
+        memory = psutil.virtual_memory()
+        if memory.available < 256 * 1024 * 1024:  # Less than 256MB
+            print("Warning: Low memory available")
+    except ImportError:
+        print("psutil not available, skipping resource check")
     Appinitializer = initializer()
     Appinitializer.run()
