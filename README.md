@@ -1,4 +1,4 @@
-# 🚀 RELEASED: Sigma Auto Clicker
+# 🚀 Sigma Auto Clicker
 
 ![Sigma Auto Clicker](https://github.com/user-attachments/assets/a23f8750-f22a-45d3-bc45-b614593e2ca7)
 
