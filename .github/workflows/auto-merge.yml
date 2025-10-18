@@ -1,26 +1,37 @@
-name: Auto Merge
+name: Sigma Auto Clicker Auto-Merge
 
 on:
   pull_request:
-    branches: [ main, dev ]
-    types: [opened, reopened, synchronize, ready_for_review, labeled]
+    branches:
+      - main
+      - dev
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: write # Required for merging PRs
+  pull-requests: write # Required for updating PRs
 
 jobs:
   auto-merge:
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
+    if: ${{ !github.event.pull_request.draft }} # Skip draft PRs
 
     steps:
-      - uses: actions/checkout@v4
+      # Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch full history for accurate merge operations
 
+      # Auto-merge pull requests with specific conditions
       - name: Auto-merge pull request
-        uses: pascalgn/automerge-action@v0.15.6
+        uses: pascalgn/automerge-action@v0.16.0 # Updated to latest stable version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MERGE_METHOD: squash
-          MERGE_COMMIT_MESSAGE: "🤖 Auto-merged PR #${{ github.event.pull_request.number }}"
-          PR_TITLE_PREFIX: "[Auto-merged]"
+          MERGE_METHOD: squash # Use squash merge for cleaner history
+          MERGE_COMMIT_MESSAGE: "🤖 Auto-merged PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}"
+          PR_TITLE_PREFIX: "[Auto-merged] " # Prefix for merged PR titles
