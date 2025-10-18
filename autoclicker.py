@@ -1040,13 +1040,6 @@ class SystemTrayManager:
     def on_tray_activated(self, reason):
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick or reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.parent.show_normal()
-    
-    def show_minimize_notification(self):
-        if self.tray_icon:
-            self.tray_icon.showMessage(
-                Config.APP_NAME, f"just minimized to tray!",
-                QSystemTrayIcon.Information, 1000
-            )
 
 class ClickerEngine:
     def __init__(self, parent):
@@ -1277,8 +1270,6 @@ class AutoClickerApp(QMainWindow):
     def closeEvent(self, event):
         event.ignore()
         self.hide()
-        if self.tray and self.tray.tray_icon:
-            self.tray.show_minimize_notification()
     
     def quit_app(self):
         """Clean shutdown with lock release"""
