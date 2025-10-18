@@ -82,8 +82,8 @@ class Config:
             "version": "1.1.0",
             "description": (
                 "Improved tab navigation and layout for better usability. "
-                "Optimized performance for lower resource usage."
-                "UI/Code Improvements"
+                "Optimized performance for lower resource usage. "
+                "UI/Code Improvements "
                 "And so much more!!"
             )
         },
@@ -91,7 +91,7 @@ class Config:
             "date": "2025-10-18",
             "version": "1.0.9",
             "description": (
-                "Tabs Improvements"
+                "Tabs Improvements "
                 "Removed Notification during minimized "
                 "and so much more!"
             )
@@ -152,7 +152,18 @@ class Config:
     ]
 
     @staticmethod
-    def format_update_logs(separator: str = "\n\n", logger: Optional[Logger] = None) -> str:
+    def format_update_logs(separator: str = "\n", logger: Optional[Logger] = None, bullet: str = "•") -> str:
+        """
+        Format update logs for display with a clean, structured plain text layout.
+
+        Args:
+            separator (str): Separator between log entries (default: dashed line).
+            logger (Optional[Logger]): Logger instance for reporting issues (default: None).
+            bullet (str): Bullet character for description items (default: "•").
+
+        Returns:
+            str: Formatted update logs or a fallback message if no logs are available.
+        """
         if logger is None:
             logger = Logger(None)
 
@@ -168,8 +179,22 @@ class Config:
                     logger.log(f"⚠️ Invalid update log entry at index {index}: Missing required keys")
                     continue
 
-                # Format each log entry
-                entry = f"{log['date']} (v{log['version']}):\n{log['description']}"
+                # Split description into bullet points
+                description = log["description"].strip()
+                bullet_points = []
+                if description:
+                    # Split by sentences or specific phrases, removing trailing punctuation
+                    points = description.replace(" and so much more!", "").replace("And so much more!!", "").split(". ")
+                    bullet_points = [p.strip() for p in points if p.strip()]
+                    # Handle "and so much more" as a separate bullet
+                    if "and so much more" in description.lower():
+                        bullet_points.append("Various additional improvements")
+
+                # Format bullet points with indentation
+                bullet_list = "\n".join(f"  {bullet} {point}" for point in bullet_points) if bullet_points else f"  {bullet} No details provided."
+
+                # Format the entry
+                entry = f"Version{log['version']} ({log['date']}){separator.rstrip()}\n{bullet_list}"
                 formatted_entries.append(entry)
             except Exception as e:
                 logger.log(f"⚠️ Error formatting update log entry at index {index}: {e}")
@@ -179,7 +204,10 @@ class Config:
             logger.log("⚠️ No valid update log entries found.")
             return "No valid update logs available."
 
-        return separator.join(formatted_entries)
+        # Add header and final separator
+        footer = "=" * 39
+        header = f"🖱️ {Config.APP_NAME} Update History 🖱️\n{footer}\n"
+        return f"{header}{separator.join(formatted_entries)}\n{footer}\n"
     
     @staticmethod
     def load_hotkey() -> str:
