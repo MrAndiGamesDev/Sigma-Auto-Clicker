@@ -51,7 +51,7 @@ class Config:
     DEFAULT_VERSION = "1.0.0"
     LOCK_PORT = 49513
     PORTS = "127.0.0.1"
-    DEFAULT_THEME = "Light"
+    DEFAULT_THEME = "Dark"
     DEFAULT_COLOR = "Blue"
     DEFAULT_SETTINGS = {
         "click_count": "1",
@@ -82,7 +82,8 @@ class Config:
             "version": "1.1.0",
             "description": (
                 "Improved tab navigation and layout for better usability. "
-                "Optimized performance for lower resource usage."
+                "Optimized performance for lower resource usage. "
+                "UI/Code Improvements "
                 "And so much more!!"
             )
         },
@@ -90,7 +91,7 @@ class Config:
             "date": "2025-10-18",
             "version": "1.0.9",
             "description": (
-                "Tabs Improvements"
+                "Tabs Improvements "
                 "Removed Notification during minimized "
                 "and so much more!"
             )
@@ -151,14 +152,62 @@ class Config:
     ]
 
     @staticmethod
-    def format_update_logs(separator: str = "\n\n") -> str:
-        """Format update logs for display."""
+    def format_update_logs(separator: str = "\n", logger: Optional[Logger] = None, bullet: str = "•") -> str:
+        """
+        Format update logs for display with a clean, structured plain text layout.
+
+        Args:
+            separator (str): Separator between log entries (default: dashed line).
+            logger (Optional[Logger]): Logger instance for reporting issues (default: None).
+            bullet (str): Bullet character for description items (default: "•").
+
+        Returns:
+            str: Formatted update logs or a fallback message if no logs are available.
+        """
+        if logger is None:
+            logger = Logger(None)
+
         if not Config.UPDATE_LOGS:
+            logger.log("⚠️ No update logs available.")
             return "No update logs available."
-        return separator.join(
-            f"{log['date']} (v{log['version']}):\n{log['description']}"
-            for log in Config.UPDATE_LOGS
-        )
+
+        formatted_entries = []
+        for index, log in enumerate(Config.UPDATE_LOGS):
+            try:
+                # Validate required keys
+                if not all(key in log for key in ["date", "version", "description"]):
+                    logger.log(f"⚠️ Invalid update log entry at index {index}: Missing required keys")
+                    continue
+
+                # Split description into bullet points
+                description = log["description"].strip()
+                bullet_points = []
+                if description:
+                    # Split by sentences or specific phrases, removing trailing punctuation
+                    points = description.replace(" and so much more!", "").replace("And so much more!!", "").split(". ")
+                    bullet_points = [p.strip() for p in points if p.strip()]
+                    # Handle "and so much more" as a separate bullet
+                    if "and so much more" in description.lower():
+                        bullet_points.append("Various additional improvements")
+
+                # Format bullet points with indentation
+                bullet_list = "\n".join(f"  {bullet} {point}" for point in bullet_points) if bullet_points else f"  {bullet} No details provided."
+
+                # Format the entry
+                entry = f"Version{log['version']} ({log['date']}){separator.rstrip()}\n{bullet_list}"
+                formatted_entries.append(entry)
+            except Exception as e:
+                logger.log(f"⚠️ Error formatting update log entry at index {index}: {e}")
+                continue
+
+        if not formatted_entries:
+            logger.log("⚠️ No valid update log entries found.")
+            return "No valid update logs available."
+
+        # Add header and final separator
+        footer = "=" * 39
+        header = f"🖱️ {Config.APP_NAME} Update History 🖱️\n{footer}\n"
+        return f"{header}{separator.join(formatted_entries)}\n{footer}\n"
     
     @staticmethod
     def load_hotkey() -> str:
@@ -290,92 +339,158 @@ class HotkeyManager:
             return False
 
 class ThemeManager:
-    """Manages application themes and styles."""
+    """Manages application themes and styles for consistent UI appearance."""
+    
+    # Common style properties shared across themes
+    _BASE_STYLE_TEMPLATE = """
+        QMainWindow {{ background-color: {main_bg}; color: {main_fg}; }}
+        QGroupBox {{ font-weight: bold; border: 1px solid {border_color}; 
+                    border-radius: 8px; margin-top: 10px; padding: 10px; 
+                    color: {group_fg}; background-color: {group_bg}; }}
+        QLabel {{ color: {label_fg}; }}
+        QLineEdit {{ background-color: {input_bg}; border: 1px solid {input_border}; 
+                    border-radius: 5px; padding: 5px; color: {input_fg}; }}
+        QTextEdit {{ background-color: {input_bg}; color: {input_fg}; 
+                    border: 1px solid {input_border}; border-radius: 5px; padding: 5px; }}
+        QComboBox {{ background-color: {input_bg}; color: {input_fg}; 
+                    border: 1px solid {input_border}; border-radius: 5px; padding: 5px; }}
+        QTabWidget::pane {{ border: 1px solid {border_color}; background: {tab_bg}; }}
+        QTabBar::tab {{ background: {tab_bg}; color: {tab_fg}; padding: 8px; }}
+        QTabBar::tab:selected {{ background: {tab_selected_bg}; color: {tab_selected_fg}; }}
+    """
+
+    # Theme definitions with color values
     BASE_STYLES = {
-        "Dark": """
-            QMainWindow { background-color: #1e1e2e; color: #ffffff; }
-            QGroupBox { font-weight: bold; border: 1px solid #333; border-radius: 8px; 
-                       margin-top: 10px; padding: 10px; color: #fff; background-color: #2e2e3e; }
-            QLabel { color: #ffffff; }
-            QLineEdit { background-color: #2e2e3e; border: 1px solid #444; 
-                       border-radius: 5px; padding: 5px; color: #fff; }
-            QTextEdit { background-color: #2e2e3e; color: #fff; border: 1px solid #444; 
-                       border-radius: 5px; padding: 5px; }
-            QComboBox { background-color: #2e2e3e; color: white; border: 1px solid #444; 
-                       border-radius: 5px; padding: 5px; }
-            QTabWidget::pane { border: 1px solid #333; background: #2e2e3e; }
-            QTabBar::tab { background: #2e2e3e; color: #aaa; padding: 8px; }
-            QTabBar::tab:selected { background: #0a84ff; color: white; }
-        """,
-        "Light": """
-            QMainWindow { background-color: #f0f0f0; color: #000000; }
-            QGroupBox { font-weight: bold; border: 1px solid #ccc; border-radius: 8px; 
-                       margin-top: 10px; padding: 10px; color: #000; background-color: #ffffff; }
-            QLabel { color: #000; }
-            QLineEdit { background-color: #fff; border: 1px solid #aaa; 
-                       border-radius: 5px; padding: 5px; color: #000; }
-            QTextEdit { background-color: #fff; color: #000; border: 1px solid #aaa; 
-                       border-radius: 5px; padding: 5px; }
-            QComboBox { background-color: #fff; color: #000; border: 1px solid #aaa; 
-                       border-radius: 5px; padding: 5px; }
-            QTabWidget::pane { border: 1px solid #ccc; background: #fff; }
-            QTabBar::tab { background: #e0e0e0; color: #444; padding: 8px; }
-            QTabBar::tab:selected { background: #0078d7; color: white; }
-        """
+        "Dark": {
+            "main_bg": "#1e1e2e", "main_fg": "#ffffff",
+            "group_bg": "#2e2e3e", "group_fg": "#ffffff",
+            "label_fg": "#ffffff",
+            "input_bg": "#2e2e3e", "input_fg": "#ffffff", "input_border": "#444",
+            "border_color": "#333",
+            "tab_bg": "#2e2e3e", "tab_fg": "#aaa",
+            "tab_selected_bg": "#0a84ff", "tab_selected_fg": "#ffffff"
+        },
+        "Light": {
+            "main_bg": "#f0f0f0", "main_fg": "#000000",
+            "group_bg": "#ffffff", "group_fg": "#000000",
+            "label_fg": "#000000",
+            "input_bg": "#ffffff", "input_fg": "#000000", "input_border": "#aaa",
+            "border_color": "#ccc",
+            "tab_bg": "#e0e0e0", "tab_fg": "#444",
+            "tab_selected_bg": "#0078d7", "tab_selected_fg": "#ffffff"
+        }
     }
 
+    # Color themes for buttons
     COLOR_THEMES = {
-        "Blue": {"base": "#0078d4", "hover": "#106ebe"},
-        "Dark Gray": {"base": "#36454f", "hover": "#2f3d44"},
-        "Green": {"base": "#107c10", "hover": "#0a5f0a"},
-        "Red": {"base": "#d13438", "hover": "#a52a2e"},
-        "Orange": {"base": "#d24726", "hover": "#a63d1f"},
-        "Purple": {"base": "#701cb8", "hover": "#5a1699"},
-        "Teal": {"base": "#00838f", "hover": "#006d77"},
-        "Pink": {"base": "#e91e63", "hover": "#c2185b"},
-        "Indigo": {"base": "#3f51b5", "hover": "#303f9f"},
-        "Amber": {"base": "#ff9800", "hover": "#f57c00"},
-        "Cyan": {"base": "#00bcd4", "hover": "#00acc1"},
-        "Lime": {"base": "#cddc39", "hover": "#c0ca33"},
-        "DeepPurple": {"base": "#9c27b0", "hover": "#8e24aa"},
-        "Brown": {"base": "#795548", "hover": "#5d4037"},
-        "Grey": {"base": "#9e9e9e", "hover": "#757575"},
-        "Magenta": {"base": "#e91e63", "hover": "#ad1457"},
-        "Gold": {"base": "#ffd700", "hover": "#ffb300"},
-        "Turquoise": {"base": "#26c6da", "hover": "#00bcd4"},
-        "Coral": {"base": "#ff7f50", "hover": "#ff6b35"},
-        "Mint": {"base": "#98fb98", "hover": "#7cfc00"},
-        "Lavender": {"base": "#e6e6fa", "hover": "#d8bfd8"},
-        "Emerald": {"base": "#2ecc71", "hover": "#27ae60"},
-        "Slate": {"base": "#34495e", "hover": "#2c3e50"},
-        "Maroon": {"base": "#800000", "hover": "#660000"},
-        "Olive": {"base": "#808000", "hover": "#666633"},
-        "SkyBlue": {"base": "#87ceeb", "hover": "#00b7eb"},
-        "Violet": {"base": "#ee82ee", "hover": "#da70d6"},
-        "Rose": {"base": "#ff66cc", "hover": "#ff33b5"},
-        "Navy": {"base": "#000080", "hover": "#000066"},
-        "Peach": {"base": "#ffdab9", "hover": "#ffc107"},
+        "Blue": {"base": "#0078d4", "hover": "#106ebe", "category": "Primary"},
+        "Dark Gray": {"base": "#36454f", "hover": "#2f3d44", "category": "Neutral"},
+        "Green": {"base": "#107c10", "hover": "#0a5f0a", "category": "Vibrant"},
+        "Red": {"base": "#d13438", "hover": "#a52a2e", "category": "Vibrant"},
+        "Orange": {"base": "#d24726", "hover": "#a63d1f", "category": "Vibrant"},
+        "Purple": {"base": "#701cb8", "hover": "#5a1699", "category": "Vibrant"},
+        "Teal": {"base": "#00838f", "hover": "#006d77", "category": "Vibrant"},
+        "Indigo": {"base": "#3f51b5", "hover": "#303f9f", "category": "Primary"},
+        "Amber": {"base": "#ff9800", "hover": "#f57c00", "category": "Vibrant"},
+        "Cyan": {"base": "#00bcd4", "hover": "#00acc1", "category": "Vibrant"},
+        "Lime": {"base": "#cddc39", "hover": "#c0ca33", "category": "Vibrant"},
+        "DeepPurple": {"base": "#9c27b0", "hover": "#8e24aa", "category": "Vibrant"},
+        "Brown": {"base": "#795548", "hover": "#5d4037", "category": "Neutral"},
+        "Grey": {"base": "#9e9e9e", "hover": "#757575", "category": "Neutral"},
+        "Gold": {"base": "#ffd700", "hover": "#ffb300", "category": "Vibrant"},
+        "Turquoise": {"base": "#26c6da", "hover": "#00bcd4", "category": "Vibrant"},
+        "Coral": {"base": "#ff7f50", "hover": "#ff6b35", "category": "Vibrant"},
+        "Mint": {"base": "#98fb98", "hover": "#7cfc00", "category": "Vibrant"},
+        "Lavender": {"base": "#e6e6fa", "hover": "#d8bfd8", "category": "Pastel"},
+        "Emerald": {"base": "#2ecc71", "hover": "#27ae60", "category": "Vibrant"},
+        "Slate": {"base": "#34495e", "hover": "#2c3e50", "category": "Neutral"},
+        "Maroon": {"base": "#800000", "hover": "#660000", "category": "Neutral"},
+        "Olive": {"base": "#808000", "hover": "#666633", "category": "Neutral"},
+        "SkyBlue": {"base": "#87ceeb", "hover": "#00b7eb", "category": "Pastel"},
+        "Violet": {"base": "#ee82ee", "hover": "#da70d6", "category": "Vibrant"},
+        "Rose": {"base": "#ff66cc", "hover": "#ff33b5", "category": "Vibrant"},
+        "Navy": {"base": "#000080", "hover": "#000066", "category": "Neutral"},
+        "Peach": {"base": "#ffdab9", "hover": "#ffc107", "category": "Pastel"}
     }
 
     @classmethod
-    def apply_theme(cls, widget: QWidget, appearance: str, color_theme: str) -> None:
-        """Apply theme and color to the widget and its buttons."""
-        widget.setStyleSheet(cls.BASE_STYLES.get(appearance, cls.BASE_STYLES[Config.DEFAULT_THEME]))
-        buttons = widget.findChildren(QPushButton)
-        button_style = cls.get_button_style(color_theme, appearance)
-        for button in buttons:
-            button.setStyleSheet(button_style)
+    def apply_theme(cls, widget: QWidget, appearance: str, color_theme: str, logger: Optional[Logger] = None) -> None:
+        """
+        Apply theme and color to the widget and its buttons.
+
+        Args:
+            widget (QWidget): The widget to apply the theme to.
+            appearance (str): The base theme (e.g., 'Dark', 'Light').
+            color_theme (str): The color theme for buttons (e.g., 'Blue').
+            logger (Optional[Logger]): Logger instance for reporting issues.
+        """
+        if logger is None:
+            logger = Logger(None)
+
+        # Validate appearance
+        appearance = appearance if appearance in cls.BASE_STYLES else Config.DEFAULT_THEME
+        if appearance not in cls.BASE_STYLES:
+            logger.log(f"⚠️ Invalid appearance '{appearance}', falling back to {Config.DEFAULT_THEME}")
+
+        # Apply base styles
+        try:
+            style_config = cls.BASE_STYLES[appearance]
+            stylesheet = cls._BASE_STYLE_TEMPLATE.format(**style_config)
+            widget.setStyleSheet(stylesheet)
+        except Exception as e:
+            logger.log(f"❌ Error applying base style for '{appearance}': {e}")
+            widget.setStyleSheet(cls._BASE_STYLE_TEMPLATE.format(**cls.BASE_STYLES[Config.DEFAULT_THEME]))
+
+        # Apply button styles
+        try:
+            button_style = cls.get_button_style(color_theme, appearance, logger)
+            for button in widget.findChildren(QPushButton):
+                button.setStyleSheet(button_style)
+        except Exception as e:
+            logger.log(f"❌ Error applying button style for '{color_theme}': {e}")
 
     @staticmethod
-    def get_button_style(theme: str, appearance: str) -> str:
-        """Generate button style for the given theme and appearance."""
-        theme_config = ThemeManager.COLOR_THEMES.get(theme, ThemeManager.COLOR_THEMES[Config.DEFAULT_COLOR])
+    def get_button_style(theme: str, appearance: str, logger: Optional[Logger] = None) -> str:
+        """
+        Generate button style for the given theme and appearance.
+
+        Args:
+            theme (str): The color theme (e.g., 'Blue').
+            appearance (str): The base theme (e.g., 'Dark', 'Light').
+            logger (Optional[Logger]): Logger instance for reporting issues.
+
+        Returns:
+            str: The stylesheet for buttons.
+        """
+        if logger is None:
+            logger = Logger(None)
+
+        # Validate color theme
+        theme = theme if theme in ThemeManager.COLOR_THEMES else Config.DEFAULT_COLOR
+        if theme not in ThemeManager.COLOR_THEMES:
+            logger.log(f"⚠️ Invalid color theme '{theme}', falling back to {Config.DEFAULT_COLOR}")
+
+        theme_config = ThemeManager.COLOR_THEMES[theme]
         base_color = theme_config["base"]
         hover_color = theme_config["hover"]
+
+        # Adjust colors for Light theme
         if appearance == "Light":
-            base_color = ThemeManager._darken_color(base_color, 0.1)
-            hover_color = ThemeManager._darken_color(hover_color, 0.15)
-        return f"""
+            base_color = ThemeManager._darken_color(base_color, 0.1, logger)
+            hover_color = ThemeManager._darken_color(hover_color, 0.15, logger)
+
+        # Validate colors
+        if not ThemeManager._is_valid_hex(base_color) or not ThemeManager._is_valid_hex(hover_color):
+            logger.log(f"⚠️ Invalid color values in theme '{theme}', falling back to default")
+            theme_config = ThemeManager.COLOR_THEMES[Config.DEFAULT_COLOR]
+            base_color = theme_config["base"]
+            hover_color = theme_config["hover"]
+            if appearance == "Light":
+                base_color = ThemeManager._darken_color(base_color, 0.1, logger)
+                hover_color = ThemeManager._darken_color(hover_color, 0.15, logger)
+
+        # Button style template
+        button_template = """
             QPushButton {{
                 background-color: {base_color};
                 color: white;
@@ -390,24 +505,75 @@ class ThemeManager:
                 background-color: {hover_color};
             }}
             QPushButton:pressed {{
-                background-color: {ThemeManager._darken_color(base_color, 0.2)};
+                background-color: {pressed_color};
             }}
             QPushButton:disabled {{
                 background-color: #666;
                 color: #999;
             }}
         """
+        try:
+            return button_template.format(
+                base_color=base_color,
+                hover_color=hover_color,
+                pressed_color=ThemeManager._darken_color(base_color, 0.2, logger)
+            )
+        except Exception as e:
+            logger.log(f"❌ Error formatting button style: {e}")
+            return button_template.format(
+                base_color=ThemeManager.COLOR_THEMES[Config.DEFAULT_COLOR]["base"],
+                hover_color=ThemeManager.COLOR_THEMES[Config.DEFAULT_COLOR]["hover"],
+                pressed_color=ThemeManager._darken_color(ThemeManager.COLOR_THEMES[Config.DEFAULT_COLOR]["base"], 0.2, logger)
+            )
 
     @staticmethod
-    def _darken_color(hex_color: str, factor: float) -> str:
-        """Darken a hex color by a factor."""
+    def _darken_color(hex_color: str, factor: float, logger: Optional[Logger] = None) -> str:
+        """
+        Darken a hex color by a factor.
+
+        Args:
+            hex_color (str): The hex color code (e.g., '#ffffff').
+            factor (float): The darkening factor (0.0 to 1.0).
+            logger (Optional[Logger]): Logger instance for reporting issues.
+
+        Returns:
+            str: The darkened hex color code.
+        """
+        if logger is None:
+            logger = Logger(None)
+
         try:
             hex_color = hex_color.lstrip('#')
+            if not ThemeManager._is_valid_hex(f'#{hex_color}'):
+                raise ValueError(f"Invalid hex color: {hex_color}")
             rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
             darkened = tuple(max(0, int(c * (1 - factor))) for c in rgb)
             return f"#{darkened[0]:02x}{darkened[1]:02x}{darkened[2]:02x}"
-        except:
+        except Exception as e:
+            logger.log(f"⚠️ Error darkening color '{hex_color}': {e}")
             return hex_color
+
+    @staticmethod
+    def _is_valid_hex(hex_color: str) -> bool:
+        """
+        Validate if a string is a valid hex color code.
+
+        Args:
+            hex_color (str): The hex color code to validate.
+
+        Returns:
+            bool: True if valid, False otherwise.
+        """
+        try:
+            if not isinstance(hex_color, str) or not hex_color.startswith('#'):
+                return False
+            hex_value = hex_color.lstrip('#')
+            if len(hex_value) not in (3, 6):
+                return False
+            int(hex_value, 16)
+            return True
+        except ValueError:
+            return False
 
 class OSCompatibilityChecker:
     """Checks OS compatibility and requirements."""
