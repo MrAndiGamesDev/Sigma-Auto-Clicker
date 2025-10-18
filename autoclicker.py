@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QLineEdit, QPushButton,
-    QTabWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTextEdit, QPlainTextEdit,
+    QTabWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTextEdit,
     QComboBox, QSystemTrayIcon, QMenu, QFormLayout, QMessageBox, QDialog
 )
 from PySide6.QtGui import QIcon, QAction
