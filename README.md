@@ -27,5 +27,3 @@ Sigma Auto Clicker allows users to automate mouse clicks efficiently with custom
    ```bash
    git clone https://github.com/MrAndiGamesDev/Sigma-Auto-Clicker.git
    cd ./Sigma-Auto-Clicker
-
-
