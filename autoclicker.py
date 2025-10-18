@@ -50,6 +50,10 @@ class Config:
     }
 
     SYSTEM = platform.system()
+    RELEASE = platform.release()
+    VERSION = platform.version()
+    MACHINE = platform.machine()
+
     HOME_DIR = Path.home()
 
     APPDATA_DIR = (
@@ -65,7 +69,7 @@ class Config:
     LOCK_FILE = APPDATA_DIR / f"app.lock.{LOCK_PORT}"
     
     UPDATE_LOGS = [
-        "2025-10-18: Tabs Improvements Improved Removed Notification during minimized and much more!",
+        "2025-10-18: Tabs Improvements Improved Removed Notification during minimized and so much more!",
         "2025-10-17: UI Improvements and Bug Fixes and much more!",
         "2025-10-16: Fixed app bugs! and much more (part 3)",
         "2025-10-16: Fixed An Update Management Bug and much more! (part 2)",
@@ -112,10 +116,10 @@ class OSCompatibilityChecker:
     @classmethod
     def check_compatibility(cls) -> Dict[str, Any]:
         """Perform comprehensive OS compatibility check"""
-        system = platform.system()
-        release = platform.release()
-        version = platform.version()
-        machine = platform.machine()
+        system = Config.SYSTEM
+        release = Config.RELEASE
+        version = Config.VERSION
+        machine = Config.MACHINE
         
         result = {
             "system": system,
@@ -182,7 +186,8 @@ class OSCompatibilityChecker:
                     win_ver = sys.getwindowsversion()
                     major = win_ver.major
                     minor = win_ver.minor
-                    return (major > 10) or (major == 10 and minor >= 0)
+                    version = (major > 10) or (major == 10 and minor >= 0)
+                    return version
                 return True  # Fallback
             elif system == "Darwin": # macOS
                 # version check for macOS
@@ -195,7 +200,8 @@ class OSCompatibilityChecker:
                         info = plistlib.load(f)
                         major = int(info['ProductVersion'].split('.')[0])
                         minor = int(info['ProductVersion'].split('.')[1])
-                        return (major > 10) or (major == 10 and minor >= 15)
+                        version = (major > 10) or (major == 10 and minor >= 15)
+                        return version
                 except:
                     return True # Fallback
             elif system == "Linux": # Linux
@@ -204,7 +210,8 @@ class OSCompatibilityChecker:
                 if len(kernel_parts) >= 2:
                     major = int(kernel_parts[0])
                     minor = int(kernel_parts[1])
-                    return (major > 5) or (major == 5 and minor >= 4)
+                    version = (major > 5) or (major == 5 and minor >= 4)
+                    return version
                 return True
         except:
             return True # Fallback to allow running
@@ -806,6 +813,7 @@ class Styles:
     
     COLOR_THEMES = {
         "Blue": {"base": "#0078d4", "hover": "#106ebe"},
+        "Dark Gray": {"base": "#36454f", "hover": "#2f3d44"},
         "Green": {"base": "#107c10", "hover": "#0a5f0a"},
         "Red": {"base": "#d13438", "hover": "#a52a2e"},
         "Orange": {"base": "#d24726", "hover": "#a63d1f"},
@@ -834,7 +842,6 @@ class Styles:
         "Rose": {"base": "#ff66cc", "hover": "#ff33b5"},
         "Navy": {"base": "#000080", "hover": "#000066"},
         "Peach": {"base": "#ffdab9", "hover": "#ffc107"},
-        "Dark Gray": {"base": "#36454f", "hover": "#2f3d44"},
     }
     
     @classmethod
