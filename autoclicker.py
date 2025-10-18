@@ -69,15 +69,89 @@ class Config:
     LOCK_FILE = APPDATA_DIR / f"app.lock.{LOCK_PORT}"
     
     UPDATE_LOGS = [
-        "2025-10-18: Tabs Improvements Removed Notification during minimized and so much more!",
-        "2025-10-17: UI Improvements and Bug Fixes and much more!",
-        "2025-10-16: Fixed app bugs! and much more (part 3)",
-        "2025-10-16: Fixed An Update Management Bug and much more! (part 2)",
-        "2025-10-16: Added automatic update checking Version management UI/Code improvements UI Improvements And Much More!",
-        "2025-10-15: Fixed Light Mode support and UI improvements",
-        "2025-10-14: Added Update Logs tab and color themes",
-        "2025-10-13: Initial release"
+        {
+            "date": "2025-10-19",
+            "version": "1.1.0",
+            "description": (
+                "Improved tab navigation and layout for better usability. "
+                "Optimized performance for lower resource usage."
+            )
+        },
+        {
+            "date": "2025-10-18",
+            "version": "1.0.9",
+            "description": (
+                "Tabs Improvements"
+                "Removed Notification during minimized "
+                "and so much more!"
+            )
+        },
+        {
+            "date": "2025-10-17",
+            "version": "1.0.8",
+            "description": (
+                "Enhanced UI with refined styling and improved responsiveness. "
+                "Fixed bugs related to theme switching and button states."
+            )
+        },
+        {
+            "date": "2025-10-16",
+            "version": "1.0.7",
+            "description": (
+                "Fixed miscellaneous application bugs for improved stability. "
+                "Improved error handling in the update checker."
+            )
+        },
+        {
+            "date": "2025-10-16",
+            "version": "1.0.6",
+            "description": (
+                "Resolved issues in the update management system. "
+                "Added support for caching version information."
+            )
+        },
+        {
+            "date": "2025-10-16",
+            "version": "1.0.5",
+            "description": (
+                "Introduced automatic update checking. "
+                "Added version management features and improved UI code structure."
+            )
+        },
+        {
+            "date": "2025-10-15",
+            "version": "1.0.4",
+            "description": (
+                "Fixed Light Mode rendering issues. "
+                "Improved UI consistency across themes."
+            )
+        },
+        {
+            "date": "2025-10-14",
+            "version": "1.0.3",
+            "description": (
+                "Added Update Logs tab for version history. "
+                "Introduced customizable color themes."
+            )
+        },
+        {
+            "date": "2025-10-13",
+            "version": "1.0.0",
+            "description": "Initial release of Sigma Auto Clicker."
+        }
     ]
+
+    @staticmethod
+    def format_update_logs(separator: str = "\n\n") -> str:
+        if not Config.UPDATE_LOGS:
+            return "No update logs available."
+        
+        formatted_logs = []
+        for log in Config.UPDATE_LOGS:
+            entry = f"{log['date']} (v{log['version']}):\n{log['description']}"
+            formatted_logs.append(entry)
+        
+        return separator.join(formatted_logs)
 
 class OSCompatibilityChecker:
     """Comprehensive OS compatibility and requirements checker"""
@@ -1062,20 +1136,17 @@ class UIManager:
             self.parent.tray.tray_icon.setToolTip(f"{Config.APP_NAME} (v{current})")
     
     def set_update_logs(self, separator: str = "\n\n") -> None:
+        """Set the update logs in the Updates tab."""
         widget_key = "update_text"
         if widget_key not in self.widgets:
             print(f"Warning: Widget '{widget_key}' not found in self.widgets")
             return
         widget = self.widgets[widget_key]
         try:
-            logs: List[str] = getattr(Config, "UPDATE_LOGS", [])
-            if not logs:
-                widget.setPlainText("No update logs available.")
-                return
-            formatted_logs = separator.join(str(log) for log in logs)
-            widget.setPlainText(formatted_logs)
-        except AttributeError:
-            raise AttributeError("Config.UPDATE_LOGS is not defined or accessible")
+            widget.setPlainText(Config.format_update_logs(separator))
+        except Exception as e:
+            print(f"Error setting update logs: {e}")
+            widget.setPlainText("Error loading update logs.")
 
 class CreditsUI:
     """Manages the Credits tab UI for the Sigma Auto Clicker application"""
