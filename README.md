@@ -1,10 +1,9 @@
 # 🚀 Sigma Auto Clicker
 
-![Sigma Auto Clicker](https://github.com/user-attachments/assets/a23f8750-f22a-45d3-bc45-b614593e2ca7)
-
 **Sigma Auto Clicker** is a high-performance automation tool designed to simplify repetitive clicking tasks.  
 
----
+<img width="638" height="606" alt="Screenshot 2025-10-18 122736" src="https://github.com/user-attachments/assets/2486426c-e934-46bc-a7b9-2e4fa6a1c46b" />
+
 ## 📝 Description
 Sigma Auto Clicker allows users to automate mouse clicks efficiently with customizable speed, and more. Ideal for gaming, testing, or productivity tasks.  
 ---
