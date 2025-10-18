@@ -69,15 +69,89 @@ class Config:
     LOCK_FILE = APPDATA_DIR / f"app.lock.{LOCK_PORT}"
     
     UPDATE_LOGS = [
-        "2025-10-18: Tabs Improvements Removed Notification during minimized and so much more!",
-        "2025-10-17: UI Improvements and Bug Fixes and much more!",
-        "2025-10-16: Fixed app bugs! and much more (part 3)",
-        "2025-10-16: Fixed An Update Management Bug and much more! (part 2)",
-        "2025-10-16: Added automatic update checking Version management UI/Code improvements UI Improvements And Much More!",
-        "2025-10-15: Fixed Light Mode support and UI improvements",
-        "2025-10-14: Added Update Logs tab and color themes",
-        "2025-10-13: Initial release"
+        {
+            "date": "2025-10-19",
+            "version": "1.1.0",
+            "description": (
+                "Improved tab navigation and layout for better usability. "
+                "Optimized performance for lower resource usage."
+            )
+        },
+        {
+            "date": "2025-10-18",
+            "version": "1.0.9",
+            "description": (
+                "Tabs Improvements"
+                "Removed Notification during minimized "
+                "and so much more!"
+            )
+        },
+        {
+            "date": "2025-10-17",
+            "version": "1.0.8",
+            "description": (
+                "Enhanced UI with refined styling and improved responsiveness. "
+                "Fixed bugs related to theme switching and button states."
+            )
+        },
+        {
+            "date": "2025-10-16",
+            "version": "1.0.7",
+            "description": (
+                "Fixed miscellaneous application bugs for improved stability. "
+                "Improved error handling in the update checker."
+            )
+        },
+        {
+            "date": "2025-10-16",
+            "version": "1.0.6",
+            "description": (
+                "Resolved issues in the update management system. "
+                "Added support for caching version information."
+            )
+        },
+        {
+            "date": "2025-10-16",
+            "version": "1.0.5",
+            "description": (
+                "Introduced automatic update checking. "
+                "Added version management features and improved UI code structure."
+            )
+        },
+        {
+            "date": "2025-10-15",
+            "version": "1.0.4",
+            "description": (
+                "Fixed Light Mode rendering issues. "
+                "Improved UI consistency across themes."
+            )
+        },
+        {
+            "date": "2025-10-14",
+            "version": "1.0.3",
+            "description": (
+                "Added Update Logs tab for version history. "
+                "Introduced customizable color themes."
+            )
+        },
+        {
+            "date": "2025-10-13",
+            "version": "1.0.0",
+            "description": "Initial release of Sigma Auto Clicker."
+        }
     ]
+
+    @staticmethod
+    def format_update_logs(separator: str = "\n\n") -> str:
+        if not Config.UPDATE_LOGS:
+            return "No update logs available."
+        
+        formatted_logs = []
+        for log in Config.UPDATE_LOGS:
+            entry = f"{log['date']} (v{log['version']}):\n{log['description']}"
+            formatted_logs.append(entry)
+        
+        return separator.join(formatted_logs)
 
 class OSCompatibilityChecker:
     """Comprehensive OS compatibility and requirements checker"""
@@ -670,8 +744,8 @@ class VersionManager:
             print(f"Failed to cache version: {e}")
 
     @staticmethod
-    def fetch_latest_release() -> Dict[str, Any]:
-        """Fetch latest release info from GitHub"""
+    def fetch_latest_release(timeout: float = 10.0) -> Dict[str, Any]:
+        """Fetch latest release info from GitHub with timeout."""
         try:
             headers = {
                 'Accept': 'application/vnd.github.v3+json',
@@ -679,9 +753,8 @@ class VersionManager:
             }
 
             print(f"Fetching latest release from GitHub...")
-            
             url = f"https://api.github.com/repos/{Config.GITHUB_REPO}/releases/latest"
-            response = requests.get(url, headers=headers, timeout=15)
+            response = requests.get(url, headers=headers, timeout=timeout)
             response.raise_for_status()
             
             data = response.json()
@@ -698,18 +771,45 @@ class VersionManager:
                 }
             else:
                 print("No valid tag name found in release")
+                return {
+                    'version': Config.DEFAULT_VERSION,
+                    'download_url': f"https://github.com/{Config.GITHUB_REPO}",
+                    'release_notes': 'No valid release found.',
+                    'success': False
+                }
                 
-        except requests.exceptions.RequestException as e:
-            print(f"Network error: {e}")
+        except requests.exceptions.Timeout:
+            print("Network request timed out")
+            return {
+                'version': Config.DEFAULT_VERSION,
+                'download_url': f"https://github.com/{Config.GITHUB_REPO}",
+                'release_notes': 'Request timed out.',
+                'success': False
+            }
+        except requests.exceptions.ConnectionError:
+            print("Network connection error")
+            return {
+                'version': Config.DEFAULT_VERSION,
+                'download_url': f"https://github.com/{Config.GITHUB_REPO}",
+                'release_notes': 'Network connection error.',
+                'success': False
+            }
+        except requests.exceptions.HTTPError as e:
+            print(f"HTTP error: {e}")
+            return {
+                'version': Config.DEFAULT_VERSION,
+                'download_url': f"https://github.com/{Config.GITHUB_REPO}",
+                'release_notes': f'HTTP error: {str(e)}',
+                'success': False
+            }
         except Exception as e:
             print(f"Error fetching release: {e}")
-        
-        return {
-            'version': Config.DEFAULT_VERSION,
-            'download_url': f"https://github.com/{Config.GITHUB_REPO}",
-            'release_notes': 'Unable to fetch latest release.',
-            'success': False
-        }
+            return {
+                'version': Config.DEFAULT_VERSION,
+                'download_url': f"https://github.com/{Config.GITHUB_REPO}",
+                'release_notes': f'Unexpected error: {str(e)}',
+                'success': False
+            }
     
     @staticmethod
     def get_current_version() -> str:
@@ -750,20 +850,33 @@ class VersionManager:
             return new > current
 
 class UpdateChecker(QThread):
-    update_available = pyqtSignal(dict)
-    check_completed = pyqtSignal(bool, str)
-    version_fetched = pyqtSignal(str)
-    
-    def __init__(self, current_version: str):
+    """Thread for checking application updates asynchronously."""
+    update_available = pyqtSignal(dict)  # Emits release info when an update is available
+    check_completed = pyqtSignal(bool, str)  # Emits success status and message
+    version_fetched = pyqtSignal(str)  # Emits the fetched latest version
+
+    def __init__(self, current_version: str, timeout: float = 10.0):
         super().__init__()
         self.current_version = current_version
-    
+        self.timeout = timeout
+        self._running = True
+
     def run(self):
         try:
+            if not self._running:
+                return
+
             print("Starting update check...")
-            release_info = VersionManager.fetch_latest_release()
+            start_time = time.time()
+
+            # Fetch latest release information with timeout
+            release_info = VersionManager.fetch_latest_release(timeout=self.timeout)
             latest_version = release_info.get('version', self.current_version)
+
+            # Emit the fetched version
             self.version_fetched.emit(latest_version)
+
+            # Check if the fetch was successful
             if release_info.get('success', False):
                 if VersionManager.is_newer_version(latest_version, self.current_version):
                     self.update_available.emit(release_info)
@@ -771,11 +884,26 @@ class UpdateChecker(QThread):
                 else:
                     self.check_completed.emit(True, f"You're up to date! (v{self.current_version})")
             else:
-                self.check_completed.emit(True, "Update check unavailable")
-                VersionManager.cache_latest_version(latest_version)
+                self.check_completed.emit(False, "Failed to fetch update information")
+
+            # Cache the latest version
+            VersionManager.cache_latest_version(latest_version)
+
+            # Log execution time for debugging
+            print(f"Update check completed in {time.time() - start_time:.2f} seconds")
+
         except Exception as e:
-            print(f"Update check error: {e}")
-            self.check_completed.emit(False, f"Update check failed: {str(e)}")
+            error_msg = f"Update check failed: {str(e)}"
+            print(error_msg)
+            self.check_completed.emit(False, error_msg)
+
+    def stop(self):
+        """Safely stop the update checker thread."""
+        self._running = False
+        self.wait()  # Ensure the thread terminates cleanly
+
+    def is_update_needed(self, latest_version: str) -> bool:
+        return VersionManager.is_newer_version(latest_version, self.current_version)
 
 class Styles:
     BASE_STYLES = {
@@ -947,6 +1075,8 @@ class UIManager:
         group.setLayout(form)
         return group
     
+    
+    
     def create_theme_settings(self) -> QGroupBox:
         group = QGroupBox("🎨 Interface")
         form = QFormLayout()
@@ -1006,21 +1136,112 @@ class UIManager:
             self.parent.tray.tray_icon.setToolTip(f"{Config.APP_NAME} (v{current})")
     
     def set_update_logs(self, separator: str = "\n\n") -> None:
+        """Set the update logs in the Updates tab."""
         widget_key = "update_text"
         if widget_key not in self.widgets:
             print(f"Warning: Widget '{widget_key}' not found in self.widgets")
             return
         widget = self.widgets[widget_key]
         try:
-            logs: List[str] = getattr(Config, "UPDATE_LOGS", [])
-            if not logs:
-                widget.setPlainText("No update logs available.")
-                return
-            formatted_logs = separator.join(str(log) for log in logs)
-            widget.setPlainText(formatted_logs)
-        except AttributeError:
-            raise AttributeError("Config.UPDATE_LOGS is not defined or accessible")
+            widget.setPlainText(Config.format_update_logs(separator))
+        except Exception as e:
+            print(f"Error setting update logs: {e}")
+            widget.setPlainText("Error loading update logs.")
 
+class CreditsUI:
+    """Manages the Credits tab UI for the Sigma Auto Clicker application"""
+    def __init__(self, parent):
+        self.parent = parent
+        self.widgets = {}
+
+    def create_header(self) -> QWidget:
+        """Creates the header for the Credits tab"""
+        layout = QHBoxLayout()
+        header_label = QLabel("📄 Credits")
+        header_label.setStyleSheet("font-size: 22px; font-weight: bold;")
+
+        try:
+            icon_path = FileManager.download_icon()
+            self.parent.setWindowIcon(QIcon(icon_path))
+        except Exception as e:
+            print(f"Failed to set window icon: {e}")
+
+        layout.addWidget(header_label)
+        layout.addStretch()
+        
+        widget = QWidget()
+        widget.setLayout(layout)
+        return widget
+    
+    def create_credits_tab(self) -> QWidget:
+        """Creates the Credits tab content with optimized sizing"""
+        widget = QWidget()
+        layout = QVBoxLayout()
+        layout.setContentsMargins(10, 10, 10, 10)  # Consistent margins
+        layout.setSpacing(8)  # Reduced spacing for tighter layout
+        
+        # Add header
+        layout.addWidget(self.create_header())
+        
+        # Credits group box
+        credits_group = QGroupBox("👥 Contributors & Credits")
+        credits_group.setStyleSheet("font-size: 14px;")  # Slightly smaller title font
+        credits_layout = QVBoxLayout()
+        credits_layout.setContentsMargins(8, 8, 8, 8)  # Reduced internal margins
+        credits_layout.setSpacing(5)  # Tighter spacing inside group
+        
+        # Define credits content
+        credits_content = (
+            "Sigma Auto Clicker\n\n"
+            "Developed by: MrAndiGamesDev\n"
+            "GitHub: https://github.com/MrAndiGamesDev\n\n"
+            "Contributors:\n"
+            "- Lead Developer: MrAndiGamesDev\n"
+            "- UI/UX Design: MrAndiGamesDev\n"
+            "- Special Thanks: Open Source Community\n\n"
+            "Libraries Used:\n"
+            "- PySide6: GUI Framework\n"
+            "- PyAutoGUI: Automation Engine\n"
+            "- Requests: HTTP Requests\n"
+            "- Keyboard: Hotkey Support\n"
+            "- Psutil: System Resources Monitoring\n\n"
+            "License: MIT License\n"
+            "Version: {version}"
+        ).format(version=self.parent.current_version)
+        
+        # Create credits text display
+        self.widgets['credits_text'] = QTextEdit()
+        self.widgets['credits_text'].setReadOnly(True)
+        self.widgets['credits_text'].setPlainText(credits_content)
+        self.widgets['credits_text'].setStyleSheet(
+            "font-size: 12px; padding: 10px; border-radius: 5px;"  # Reduced padding, added border-radius
+        )
+        self.widgets['credits_text'].setFixedHeight(380)  # Fixed height to fit within window
+        
+        credits_layout.addWidget(self.widgets['credits_text'])
+        credits_group.setLayout(credits_layout)
+        layout.addWidget(credits_group)
+        
+        # Add a button to visit GitHub
+        github_btn = QPushButton("🌐 Visit GitHub")
+        github_btn.setStyleSheet(
+            Styles.get_button_style(self.parent.current_color_theme, self.parent.current_appearance) +
+            "min-height: 32px; font-size: 12px;"  # Consistent button height and font
+        )
+        github_btn.setFixedWidth(150)  # Fixed width for better alignment
+        github_btn.clicked.connect(lambda: webbrowser.open(f"https://github.com/{Config.GITHUB_REPO}"))
+        
+        # Center the button
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(github_btn)
+        button_layout.addStretch()
+        layout.addLayout(button_layout)
+        
+        layout.addStretch()
+        widget.setLayout(layout)
+        return widget
+    
 class SystemTrayManager:
     def __init__(self, parent):
         self.parent = parent
@@ -1174,22 +1395,29 @@ class AutoClickerApp(QMainWindow):
     
     def _setup_tabs(self, layout):
         tabs = QTabWidget()
+        
+        # Settings tab
         settings_tab = QWidget()
         settings_layout = QVBoxLayout(settings_tab)
         settings_layout.addWidget(self.ui.create_click_settings())
         settings_layout.addWidget(self.ui.create_theme_settings())
         settings_layout.addStretch()
-
         tabs.addTab(settings_tab, "⚙️ Settings")
+        
+        # Updates tab
         tabs.addTab(self.ui.create_update_tab(), "📜 Updates")
         
+        # Activity Log tab
         log_tab = QWidget()
         log_layout = QVBoxLayout(log_tab)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
         log_layout.addWidget(self.log_text)
-        
         tabs.addTab(log_tab, "📋 Activity Log")
+        
+        # Credits tab
+        credits_ui = CreditsUI(self)
+        tabs.addTab(credits_ui.create_credits_tab(), "📄 Credits")
         layout.addWidget(tabs)
     
     def _setup_controls(self, layout):
@@ -1210,7 +1438,8 @@ class AutoClickerApp(QMainWindow):
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.check_for_updates_silent)
         self.update_timer.start(Config.UPDATE_CHECK_INTERVAL)
-        QTimer.singleShot(2000, self.check_for_updates)
+        # Delay initial update check to ensure GUI is fully initialized
+        QTimer.singleShot(5000, self.check_for_updates)
     
     def _setup_hotkeys(self):
         try:
@@ -1227,10 +1456,11 @@ class AutoClickerApp(QMainWindow):
     
     def check_for_updates(self, silent: bool = False):
         if self.update_checker and self.update_checker.isRunning():
+            print("Update check already in progress")
             return
         if not silent:
             self.log("🔄 Checking for updates...")
-        self.update_checker = UpdateChecker(self.current_version)
+        self.update_checker = UpdateChecker(self.current_version, timeout=5.0)  # Reduced timeout
         self.update_checker.update_available.connect(self._on_update_available)
         self.update_checker.check_completed.connect(self._on_check_completed)
         self.update_checker.version_fetched.connect(self._on_version_fetched)
@@ -1299,6 +1529,8 @@ class AutoClickerApp(QMainWindow):
         self.log("👋 Shutting down...")
         if hasattr(self, 'update_timer'):
             self.update_timer.stop()
+        if hasattr(self, 'update_checker') and self.update_checker and self.update_checker.isRunning():
+            self.update_checker.stop()  # Ensure update checker thread is stopped
         self.lock.release_lock()
         if self.tray and self.tray.tray_icon:
             self.tray.tray_icon.hide()
