@@ -1174,7 +1174,6 @@ class AutoClickerApp(QMainWindow):
     
     def _setup_tabs(self, layout):
         tabs = QTabWidget()
-        
         settings_tab = QWidget()
         settings_layout = QVBoxLayout(settings_tab)
         settings_layout.addWidget(self.ui.create_click_settings())
@@ -1191,7 +1190,6 @@ class AutoClickerApp(QMainWindow):
         log_layout.addWidget(self.log_text)
         
         tabs.addTab(log_tab, "📋 Activity Log")
-        
         layout.addWidget(tabs)
     
     def _setup_controls(self, layout):
@@ -1212,7 +1210,7 @@ class AutoClickerApp(QMainWindow):
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.check_for_updates_silent)
         self.update_timer.start(Config.UPDATE_CHECK_INTERVAL)
-        QTimer.singleShot(3000, self.check_for_updates)
+        QTimer.singleShot(2000, self.check_for_updates)
     
     def _setup_hotkeys(self):
         try:
