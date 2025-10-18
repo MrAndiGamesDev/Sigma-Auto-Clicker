@@ -83,6 +83,7 @@ class Config:
             "description": (
                 "Improved tab navigation and layout for better usability. "
                 "Optimized performance for lower resource usage."
+                "And so much more!!"
             )
         },
         {
@@ -325,7 +326,35 @@ class ThemeManager:
 
     COLOR_THEMES = {
         "Blue": {"base": "#0078d4", "hover": "#106ebe"},
-        # ... (other themes unchanged for brevity)
+        "Dark Gray": {"base": "#36454f", "hover": "#2f3d44"},
+        "Green": {"base": "#107c10", "hover": "#0a5f0a"},
+        "Red": {"base": "#d13438", "hover": "#a52a2e"},
+        "Orange": {"base": "#d24726", "hover": "#a63d1f"},
+        "Purple": {"base": "#701cb8", "hover": "#5a1699"},
+        "Teal": {"base": "#00838f", "hover": "#006d77"},
+        "Pink": {"base": "#e91e63", "hover": "#c2185b"},
+        "Indigo": {"base": "#3f51b5", "hover": "#303f9f"},
+        "Amber": {"base": "#ff9800", "hover": "#f57c00"},
+        "Cyan": {"base": "#00bcd4", "hover": "#00acc1"},
+        "Lime": {"base": "#cddc39", "hover": "#c0ca33"},
+        "DeepPurple": {"base": "#9c27b0", "hover": "#8e24aa"},
+        "Brown": {"base": "#795548", "hover": "#5d4037"},
+        "Grey": {"base": "#9e9e9e", "hover": "#757575"},
+        "Magenta": {"base": "#e91e63", "hover": "#ad1457"},
+        "Gold": {"base": "#ffd700", "hover": "#ffb300"},
+        "Turquoise": {"base": "#26c6da", "hover": "#00bcd4"},
+        "Coral": {"base": "#ff7f50", "hover": "#ff6b35"},
+        "Mint": {"base": "#98fb98", "hover": "#7cfc00"},
+        "Lavender": {"base": "#e6e6fa", "hover": "#d8bfd8"},
+        "Emerald": {"base": "#2ecc71", "hover": "#27ae60"},
+        "Slate": {"base": "#34495e", "hover": "#2c3e50"},
+        "Maroon": {"base": "#800000", "hover": "#660000"},
+        "Olive": {"base": "#808000", "hover": "#666633"},
+        "SkyBlue": {"base": "#87ceeb", "hover": "#00b7eb"},
+        "Violet": {"base": "#ee82ee", "hover": "#da70d6"},
+        "Rose": {"base": "#ff66cc", "hover": "#ff33b5"},
+        "Navy": {"base": "#000080", "hover": "#000066"},
+        "Peach": {"base": "#ffdab9", "hover": "#ffc107"},
     }
 
     @classmethod
