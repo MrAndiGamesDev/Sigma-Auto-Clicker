@@ -670,8 +670,8 @@ class VersionManager:
             print(f"Failed to cache version: {e}")
 
     @staticmethod
-    def fetch_latest_release() -> Dict[str, Any]:
-        """Fetch latest release info from GitHub"""
+    def fetch_latest_release(timeout: float = 10.0) -> Dict[str, Any]:
+        """Fetch latest release info from GitHub with timeout."""
         try:
             headers = {
                 'Accept': 'application/vnd.github.v3+json',
@@ -679,9 +679,8 @@ class VersionManager:
             }
 
             print(f"Fetching latest release from GitHub...")
-            
             url = f"https://api.github.com/repos/{Config.GITHUB_REPO}/releases/latest"
-            response = requests.get(url, headers=headers, timeout=15)
+            response = requests.get(url, headers=headers, timeout=timeout)
             response.raise_for_status()
             
             data = response.json()
@@ -698,18 +697,45 @@ class VersionManager:
                 }
             else:
                 print("No valid tag name found in release")
+                return {
+                    'version': Config.DEFAULT_VERSION,
+                    'download_url': f"https://github.com/{Config.GITHUB_REPO}",
+                    'release_notes': 'No valid release found.',
+                    'success': False
+                }
                 
-        except requests.exceptions.RequestException as e:
-            print(f"Network error: {e}")
+        except requests.exceptions.Timeout:
+            print("Network request timed out")
+            return {
+                'version': Config.DEFAULT_VERSION,
+                'download_url': f"https://github.com/{Config.GITHUB_REPO}",
+                'release_notes': 'Request timed out.',
+                'success': False
+            }
+        except requests.exceptions.ConnectionError:
+            print("Network connection error")
+            return {
+                'version': Config.DEFAULT_VERSION,
+                'download_url': f"https://github.com/{Config.GITHUB_REPO}",
+                'release_notes': 'Network connection error.',
+                'success': False
+            }
+        except requests.exceptions.HTTPError as e:
+            print(f"HTTP error: {e}")
+            return {
+                'version': Config.DEFAULT_VERSION,
+                'download_url': f"https://github.com/{Config.GITHUB_REPO}",
+                'release_notes': f'HTTP error: {str(e)}',
+                'success': False
+            }
         except Exception as e:
             print(f"Error fetching release: {e}")
-        
-        return {
-            'version': Config.DEFAULT_VERSION,
-            'download_url': f"https://github.com/{Config.GITHUB_REPO}",
-            'release_notes': 'Unable to fetch latest release.',
-            'success': False
-        }
+            return {
+                'version': Config.DEFAULT_VERSION,
+                'download_url': f"https://github.com/{Config.GITHUB_REPO}",
+                'release_notes': f'Unexpected error: {str(e)}',
+                'success': False
+            }
     
     @staticmethod
     def get_current_version() -> str:
@@ -750,20 +776,33 @@ class VersionManager:
             return new > current
 
 class UpdateChecker(QThread):
-    update_available = pyqtSignal(dict)
-    check_completed = pyqtSignal(bool, str)
-    version_fetched = pyqtSignal(str)
-    
-    def __init__(self, current_version: str):
+    """Thread for checking application updates asynchronously."""
+    update_available = pyqtSignal(dict)  # Emits release info when an update is available
+    check_completed = pyqtSignal(bool, str)  # Emits success status and message
+    version_fetched = pyqtSignal(str)  # Emits the fetched latest version
+
+    def __init__(self, current_version: str, timeout: float = 10.0):
         super().__init__()
         self.current_version = current_version
-    
+        self.timeout = timeout
+        self._running = True
+
     def run(self):
         try:
+            if not self._running:
+                return
+
             print("Starting update check...")
-            release_info = VersionManager.fetch_latest_release()
+            start_time = time.time()
+
+            # Fetch latest release information with timeout
+            release_info = VersionManager.fetch_latest_release(timeout=self.timeout)
             latest_version = release_info.get('version', self.current_version)
+
+            # Emit the fetched version
             self.version_fetched.emit(latest_version)
+
+            # Check if the fetch was successful
             if release_info.get('success', False):
                 if VersionManager.is_newer_version(latest_version, self.current_version):
                     self.update_available.emit(release_info)
@@ -771,11 +810,26 @@ class UpdateChecker(QThread):
                 else:
                     self.check_completed.emit(True, f"You're up to date! (v{self.current_version})")
             else:
-                self.check_completed.emit(True, "Update check unavailable")
-                VersionManager.cache_latest_version(latest_version)
+                self.check_completed.emit(False, "Failed to fetch update information")
+
+            # Cache the latest version
+            VersionManager.cache_latest_version(latest_version)
+
+            # Log execution time for debugging
+            print(f"Update check completed in {time.time() - start_time:.2f} seconds")
+
         except Exception as e:
-            print(f"Update check error: {e}")
-            self.check_completed.emit(False, f"Update check failed: {str(e)}")
+            error_msg = f"Update check failed: {str(e)}"
+            print(error_msg)
+            self.check_completed.emit(False, error_msg)
+
+    def stop(self):
+        """Safely stop the update checker thread."""
+        self._running = False
+        self.wait()  # Ensure the thread terminates cleanly
+
+    def is_update_needed(self, latest_version: str) -> bool:
+        return VersionManager.is_newer_version(latest_version, self.current_version)
 
 class Styles:
     BASE_STYLES = {
@@ -1313,7 +1367,8 @@ class AutoClickerApp(QMainWindow):
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.check_for_updates_silent)
         self.update_timer.start(Config.UPDATE_CHECK_INTERVAL)
-        QTimer.singleShot(2000, self.check_for_updates)
+        # Delay initial update check to ensure GUI is fully initialized
+        QTimer.singleShot(5000, self.check_for_updates)
     
     def _setup_hotkeys(self):
         try:
@@ -1330,10 +1385,11 @@ class AutoClickerApp(QMainWindow):
     
     def check_for_updates(self, silent: bool = False):
         if self.update_checker and self.update_checker.isRunning():
+            print("Update check already in progress")
             return
         if not silent:
             self.log("🔄 Checking for updates...")
-        self.update_checker = UpdateChecker(self.current_version)
+        self.update_checker = UpdateChecker(self.current_version, timeout=5.0)  # Reduced timeout
         self.update_checker.update_available.connect(self._on_update_available)
         self.update_checker.check_completed.connect(self._on_check_completed)
         self.update_checker.version_fetched.connect(self._on_version_fetched)
@@ -1402,6 +1458,8 @@ class AutoClickerApp(QMainWindow):
         self.log("👋 Shutting down...")
         if hasattr(self, 'update_timer'):
             self.update_timer.stop()
+        if hasattr(self, 'update_checker') and self.update_checker and self.update_checker.isRunning():
+            self.update_checker.stop()  # Ensure update checker thread is stopped
         self.lock.release_lock()
         if self.tray and self.tray.tray_icon:
             self.tray.tray_icon.hide()
