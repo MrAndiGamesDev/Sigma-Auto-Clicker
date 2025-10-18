@@ -13,10 +13,10 @@ import psutil
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QLineEdit, QPushButton,
-    QTabWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTextEdit,
+    QTabWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTextEdit, QPlainTextEdit,
     QComboBox, QSystemTrayIcon, QMenu, QFormLayout, QMessageBox, QDialog
 )
 from PySide6.QtGui import QIcon, QAction
@@ -964,7 +964,6 @@ class UIManager:
         self.widgets['update_text'] = QTextEdit()
         self.widgets['update_text'].setReadOnly(True)
         layout.addWidget(self.widgets['update_text'])
-        
         widget.setLayout(layout)
         return widget
     
@@ -981,10 +980,21 @@ class UIManager:
         if hasattr(self.parent, 'tray') and self.parent.tray and self.parent.tray.tray_icon:
             self.parent.tray.tray_icon.setToolTip(f"{Config.APP_NAME} (v{current})")
     
-    def set_update_logs(self):
-        if 'update_text' in self.widgets:
-            logs = "\n\n".join(Config.UPDATE_LOGS)
-            self.widgets['update_text'].setPlainText(logs)
+    def set_update_logs(self, separator: str = "\n\n") -> None:
+        widget_key = "update_text"
+        if widget_key not in self.widgets:
+            print(f"Warning: Widget '{widget_key}' not found in self.widgets")
+            return
+        widget = self.widgets[widget_key]
+        try:
+            logs: List[str] = getattr(Config, "UPDATE_LOGS", [])
+            if not logs:
+                widget.setPlainText("No update logs available.")
+                return
+            formatted_logs = separator.join(str(log) for log in logs)
+            widget.setPlainText(formatted_logs)
+        except AttributeError:
+            raise AttributeError("Config.UPDATE_LOGS is not defined or accessible")
 
 class SystemTrayManager:
     def __init__(self, parent):
