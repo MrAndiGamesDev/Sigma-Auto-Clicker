@@ -83,6 +83,7 @@ class Config:
             "description": (
                 "Improved tab navigation and layout for better usability. "
                 "Optimized performance for lower resource usage."
+                "UI/Code Improvements"
                 "And so much more!!"
             )
         },
