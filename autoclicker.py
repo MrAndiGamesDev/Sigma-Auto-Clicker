@@ -947,6 +947,8 @@ class UIManager:
         group.setLayout(form)
         return group
     
+    
+    
     def create_theme_settings(self) -> QGroupBox:
         group = QGroupBox("🎨 Interface")
         form = QFormLayout()
@@ -1021,6 +1023,100 @@ class UIManager:
         except AttributeError:
             raise AttributeError("Config.UPDATE_LOGS is not defined or accessible")
 
+class CreditsUI:
+    """Manages the Credits tab UI for the Sigma Auto Clicker application"""
+    def __init__(self, parent):
+        self.parent = parent
+        self.widgets = {}
+
+    def create_header(self) -> QWidget:
+        """Creates the header for the Credits tab"""
+        layout = QHBoxLayout()
+        header_label = QLabel("📄 Credits")
+        header_label.setStyleSheet("font-size: 22px; font-weight: bold;")
+
+        try:
+            icon_path = FileManager.download_icon()
+            self.parent.setWindowIcon(QIcon(icon_path))
+        except Exception as e:
+            print(f"Failed to set window icon: {e}")
+
+        layout.addWidget(header_label)
+        layout.addStretch()
+        
+        widget = QWidget()
+        widget.setLayout(layout)
+        return widget
+    
+    def create_credits_tab(self) -> QWidget:
+        """Creates the Credits tab content with optimized sizing"""
+        widget = QWidget()
+        layout = QVBoxLayout()
+        layout.setContentsMargins(10, 10, 10, 10)  # Consistent margins
+        layout.setSpacing(8)  # Reduced spacing for tighter layout
+        
+        # Add header
+        layout.addWidget(self.create_header())
+        
+        # Credits group box
+        credits_group = QGroupBox("👥 Contributors & Credits")
+        credits_group.setStyleSheet("font-size: 14px;")  # Slightly smaller title font
+        credits_layout = QVBoxLayout()
+        credits_layout.setContentsMargins(8, 8, 8, 8)  # Reduced internal margins
+        credits_layout.setSpacing(5)  # Tighter spacing inside group
+        
+        # Define credits content
+        credits_content = (
+            "Sigma Auto Clicker\n\n"
+            "Developed by: MrAndiGamesDev\n"
+            "GitHub: https://github.com/MrAndiGamesDev\n\n"
+            "Contributors:\n"
+            "- Lead Developer: MrAndiGamesDev\n"
+            "- UI/UX Design: MrAndiGamesDev\n"
+            "- Special Thanks: Open Source Community\n\n"
+            "Libraries Used:\n"
+            "- PySide6: GUI Framework\n"
+            "- PyAutoGUI: Automation Engine\n"
+            "- Requests: HTTP Requests\n"
+            "- Keyboard: Hotkey Support\n"
+            "- Psutil: System Resources Monitoring\n\n"
+            "License: MIT License\n"
+            "Version: {version}"
+        ).format(version=self.parent.current_version)
+        
+        # Create credits text display
+        self.widgets['credits_text'] = QTextEdit()
+        self.widgets['credits_text'].setReadOnly(True)
+        self.widgets['credits_text'].setPlainText(credits_content)
+        self.widgets['credits_text'].setStyleSheet(
+            "font-size: 12px; padding: 10px; border-radius: 5px;"  # Reduced padding, added border-radius
+        )
+        self.widgets['credits_text'].setFixedHeight(380)  # Fixed height to fit within window
+        
+        credits_layout.addWidget(self.widgets['credits_text'])
+        credits_group.setLayout(credits_layout)
+        layout.addWidget(credits_group)
+        
+        # Add a button to visit GitHub
+        github_btn = QPushButton("🌐 Visit GitHub")
+        github_btn.setStyleSheet(
+            Styles.get_button_style(self.parent.current_color_theme, self.parent.current_appearance) +
+            "min-height: 32px; font-size: 12px;"  # Consistent button height and font
+        )
+        github_btn.setFixedWidth(150)  # Fixed width for better alignment
+        github_btn.clicked.connect(lambda: webbrowser.open(f"https://github.com/{Config.GITHUB_REPO}"))
+        
+        # Center the button
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(github_btn)
+        button_layout.addStretch()
+        layout.addLayout(button_layout)
+        
+        layout.addStretch()
+        widget.setLayout(layout)
+        return widget
+    
 class SystemTrayManager:
     def __init__(self, parent):
         self.parent = parent
@@ -1174,22 +1270,29 @@ class AutoClickerApp(QMainWindow):
     
     def _setup_tabs(self, layout):
         tabs = QTabWidget()
+        
+        # Settings tab
         settings_tab = QWidget()
         settings_layout = QVBoxLayout(settings_tab)
         settings_layout.addWidget(self.ui.create_click_settings())
         settings_layout.addWidget(self.ui.create_theme_settings())
         settings_layout.addStretch()
-
         tabs.addTab(settings_tab, "⚙️ Settings")
+        
+        # Updates tab
         tabs.addTab(self.ui.create_update_tab(), "📜 Updates")
         
+        # Activity Log tab
         log_tab = QWidget()
         log_layout = QVBoxLayout(log_tab)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
         log_layout.addWidget(self.log_text)
-        
         tabs.addTab(log_tab, "📋 Activity Log")
+        
+        # Credits tab
+        credits_ui = CreditsUI(self)
+        tabs.addTab(credits_ui.create_credits_tab(), "📄 Credits")
         layout.addWidget(tabs)
     
     def _setup_controls(self, layout):
