@@ -65,7 +65,7 @@ class Config:
     LOCK_FILE = APPDATA_DIR / f"app.lock.{LOCK_PORT}"
     
     UPDATE_LOGS = [
-        "2025-10-18: Small Update Improvements Tabs Improved and much more!",
+        "2025-10-18: Tabs Improvements Improved Removed Notification during minimized and much more!",
         "2025-10-17: UI Improvements and Bug Fixes and much more!",
         "2025-10-16: Fixed app bugs! and much more (part 3)",
         "2025-10-16: Fixed An Update Management Bug and much more! (part 2)",
@@ -190,7 +190,8 @@ class OSCompatibilityChecker:
                 try:
                     Library = "/System/Library"
                     CoreServices = f"{Library}/CoreServices"
-                    with open(f'{CoreServices}/SystemVersion.plist', 'rb') as f:
+                    OpenPlist = f"{CoreServices}/SystemVersion.plist"
+                    with open(OpenPlist, 'rb') as f:
                         info = plistlib.load(f)
                         major = int(info['ProductVersion'].split('.')[0])
                         minor = int(info['ProductVersion'].split('.')[1])
@@ -230,16 +231,23 @@ class OSCompatibilityChecker:
         try:
             if Config.SYSTEM == "Windows":
                 try:
+                    # Windows check
                     import ctypes
                     return ctypes.windll.shell32.IsUserAnAdmin()
                 except:
                     pass
             elif Config.SYSTEM == "Darwin":
-                # macOS check
-                return os.geteuid() == 0
+                try:
+                    # macOS check
+                    return os.geteuid() == 0
+                except:
+                    pass
             elif Config.SYSTEM == "Linux":
-                # Linux check
-                return os.geteuid() == 0
+                try:
+                    # Linux check
+                    return os.geteuid() == 0
+                except:
+                    pass
         except:
             return False
     
@@ -287,7 +295,7 @@ class OSCompatibilityChecker:
             memory = psutil.virtual_memory()
             if cpu_percent > 90:
                 return False
-            if memory.available < 512 * 1024 * 1024:  # Less than 512MB free
+            if memory.available < 512 * 1024 * 1024: # Less than 512MB free
                 return False
             return True
         except:
@@ -309,7 +317,6 @@ class OSCompatibilityChecker:
             for error in check_result["errors"]:
                 error_msg += f"• {error}\n"
             error_msg += "\nPlease update your system or install missing dependencies."
-            
             reply = QMessageBox.critical(
                 None, "Incompatible System", error_msg,
                 QMessageBox.Ok | QMessageBox.Cancel
@@ -574,8 +581,8 @@ class FileManager:
         try:
             if filepath.exists():
                 with open(filepath, 'r', encoding='utf-8') as f:
-                    version = f.read().strip()
                     # Validate version format
+                    version = f.read().strip()
                     if version and len(version.split('.')) >= 2 and version != Config.DEFAULT_VERSION:
                         return version
         except Exception as e:
@@ -634,8 +641,8 @@ class VersionManager:
                 if len(content) >= 2:
                     version, timestamp_str = content[0].strip(), content[1].strip()
                     try:
-                        timestamp = int(timestamp_str)
                         # Cache valid for 7 days
+                        timestamp = int(timestamp_str)
                         if (time.time() - timestamp) / 86400 <= 7 and version != Config.DEFAULT_VERSION:
                             return version
                     except ValueError:
@@ -663,8 +670,10 @@ class VersionManager:
                 'Accept': 'application/vnd.github.v3+json',
                 'User-Agent': Config.APP_NAME
             }
-            url = f"https://api.github.com/repos/{Config.GITHUB_REPO}/releases/latest"
+
             print(f"Fetching latest release from GitHub...")
+            
+            url = f"https://api.github.com/repos/{Config.GITHUB_REPO}/releases/latest"
             
             response = requests.get(url, headers=headers, timeout=15)
             response.raise_for_status()
