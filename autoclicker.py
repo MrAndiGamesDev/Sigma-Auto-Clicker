@@ -661,7 +661,7 @@ class VersionManager:
             print(f"Cached latest version: {version}")
         except Exception as e:
             print(f"Failed to cache version: {e}")
-    
+
     @staticmethod
     def fetch_latest_release() -> Dict[str, Any]:
         """Fetch latest release info from GitHub"""
@@ -674,7 +674,6 @@ class VersionManager:
             print(f"Fetching latest release from GitHub...")
             
             url = f"https://api.github.com/repos/{Config.GITHUB_REPO}/releases/latest"
-            
             response = requests.get(url, headers=headers, timeout=15)
             response.raise_for_status()
             
@@ -825,7 +824,17 @@ class Styles:
         "Turquoise": {"base": "#26c6da", "hover": "#00bcd4"},
         "Coral": {"base": "#ff7f50", "hover": "#ff6b35"},
         "Mint": {"base": "#98fb98", "hover": "#7cfc00"},
-        "Lavender": {"base": "#e6e6fa", "hover": "#d8bfd8"}
+        "Lavender": {"base": "#e6e6fa", "hover": "#d8bfd8"},
+        "Emerald": {"base": "#2ecc71", "hover": "#27ae60"},
+        "Slate": {"base": "#34495e", "hover": "#2c3e50"},
+        "Maroon": {"base": "#800000", "hover": "#660000"},
+        "Olive": {"base": "#808000", "hover": "#666633"},
+        "SkyBlue": {"base": "#87ceeb", "hover": "#00b7eb"},
+        "Violet": {"base": "#ee82ee", "hover": "#da70d6"},
+        "Rose": {"base": "#ff66cc", "hover": "#ff33b5"},
+        "Navy": {"base": "#000080", "hover": "#000066"},
+        "Peach": {"base": "#ffdab9", "hover": "#ffc107"},
+        "Dark Gray": {"base": "#36454f", "hover": "#2f3d44"},
     }
     
     @classmethod
