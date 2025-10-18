@@ -35,9 +35,19 @@ class Config:
     GITHUB_REPO = f"{AUTHORNAME}/Sigma-Auto-Clicker"
     UPDATE_CHECK_INTERVAL = 24 * 60 * 60 * 1000
     DEFAULT_VERSION = "1.0.0"
-    LOCK_PORT = 49513
 
+    LOCK_PORT = 49513
     PORTS = "127.0.0.1"
+
+    DEFAULT_THEME = "Light"
+    DEFAULT_COLOR = "Blue"
+    
+    DEFAULT_SETTINGS = {
+        "click_count": "1",
+        "loop_count": "0",
+        "click_delay": "1",
+        "cycle_delay": "0.5",
+    }
 
     SYSTEM = platform.system()
     HOME_DIR = Path.home()
@@ -76,25 +86,28 @@ class OSCompatibilityChecker:
             "pyautogui": True,
             "admin_warning": False
         },
-        "Darwin": {  # macOS
-            "min_version": "10.15",
-            "required_libs": ["pyautogui", "keyboard", "requests", "PySide6", "psutil"],
-            "system_tray": True,
-            "hotkeys": True,
-            "pyautogui": True,
-            "admin_warning": True,  # macOS requires accessibility permissions
-            "accessibility_needed": True
-        },
-        "Linux": {
-            "min_version": "6.1.1",
-            "required_libs": ["pyautogui", "keyboard", "requests", "PySide6", "psutil"],
-            "system_tray": True,  # Depends on desktop environment
-            "hotkeys": True,
-            "pyautogui": True,
-            "admin_warning": False,
-            "x11_warning": True  # May need X11 forwarding or Wayland compatibility
-        }
     }
+
+    # UNSUPPORTED_OS = {
+    #     "Darwin": {  # macOS
+    #         "min_version": "10.15",
+    #         "required_libs": ["pyautogui", "keyboard", "requests", "PySide6", "psutil"],
+    #         "system_tray": True,
+    #         "hotkeys": True,
+    #         "pyautogui": True,
+    #         "admin_warning": True,  # macOS requires accessibility permissions
+    #         "accessibility_needed": True
+    #     },
+    #     "Linux": {  # macOS
+    #         "min_version": "6.1.1",
+    #         "required_libs": ["pyautogui", "keyboard", "requests", "PySide6", "psutil"],
+    #         "system_tray": True,  # Depends on desktop environment
+    #         "hotkeys": True,
+    #         "pyautogui": True,
+    #         "admin_warning": False,
+    #         "x11_warning": True  # May need X11 forwarding or Wayland compatibility
+    #     }
+    # }
     
     @classmethod
     def check_compatibility(cls) -> Dict[str, Any]:
@@ -160,7 +173,7 @@ class OSCompatibilityChecker:
         return result
     
     @staticmethod
-    def _check_version(system: str, release: str, min_version: str) -> bool:
+    def _check_version(system: str, release: str, min_version: Optional[str]) -> bool:
         """Check if OS version meets minimum requirements"""
         try:
             if system == "Windows":
@@ -171,19 +184,21 @@ class OSCompatibilityChecker:
                     minor = win_ver.minor
                     return (major > 10) or (major == 10 and minor >= 0)
                 return True  # Fallback
-            elif system == "Darwin":
-                # macOS version check
+            elif system == "Darwin": # macOS
+                # version check for macOS
                 import plistlib
                 try:
-                    with open('/System/Library/CoreServices/SystemVersion.plist', 'rb') as f:
+                    Library = "/System/Library"
+                    CoreServices = f"{Library}/CoreServices"
+                    with open(f'{CoreServices}/SystemVersion.plist', 'rb') as f:
                         info = plistlib.load(f)
                         major = int(info['ProductVersion'].split('.')[0])
                         minor = int(info['ProductVersion'].split('.')[1])
                         return (major > 10) or (major == 10 and minor >= 15)
                 except:
-                    return True  # Fallback
-            else:  # Linux
-                # Kernel version check
+                    return True # Fallback
+            else: # Linux
+                # Kernel version check for Linux
                 kernel_parts = release.split('.')
                 if len(kernel_parts) >= 2:
                     major = int(kernel_parts[0])
@@ -191,7 +206,7 @@ class OSCompatibilityChecker:
                     return (major > 5) or (major == 5 and minor >= 4)
                 return True
         except:
-            return True  # Fallback to allow running
+            return True # Fallback to allow running
     
     @staticmethod
     def _check_libraries(required_libs: list) -> list:
@@ -213,16 +228,17 @@ class OSCompatibilityChecker:
     def _is_admin_or_elevated() -> bool:
         """Check if running with administrator privileges"""
         try:
-            if platform.system() == "Windows":
+            if Config.SYSTEM == "Windows":
                 try:
                     import ctypes
                     return ctypes.windll.shell32.IsUserAnAdmin()
                 except:
                     pass
-            elif platform.system() == "Darwin":
+            elif Config.SYSTEM == "Darwin":
                 # macOS check
                 return os.geteuid() == 0
-            else:  # Linux
+            elif Config.SYSTEM == "Linux":
+                # Linux check
                 return os.geteuid() == 0
         except:
             return False
@@ -257,7 +273,6 @@ class OSCompatibilityChecker:
             # Test basic PyAutoGUI functionality
             pyautogui.FAILSAFE = False
             pyautogui.PAUSE = 0
-            # Just check if it can be imported and basic position works
             pyautogui.position()
             return True
         except Exception:
@@ -267,16 +282,13 @@ class OSCompatibilityChecker:
     def _check_system_resources() -> bool:
         """Check minimum system resources"""
         try:
+            # Basic resource checks
             cpu_percent = psutil.cpu_percent(interval=0.1)
             memory = psutil.virtual_memory()
-            
-            # Basic resource checks
             if cpu_percent > 90:
                 return False
-            
             if memory.available < 512 * 1024 * 1024:  # Less than 512MB free
                 return False
-            
             return True
         except:
             return True # Assume OK if can't check
@@ -360,8 +372,8 @@ class InstanceDialog(QDialog):
     def _force_new(self):
         """Handle force new instance"""
         reply = QMessageBox.warning(
-            self, "Warning", 
-            "Running multiple instances may cause conflicts and instability!\n\nWould You Like To Continue anyway?",
+            self, "Warning",
+            f"Running multiple instances may cause conflicts and instability!\n\nWould You Like To Continue anyway?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -383,12 +395,10 @@ class SingletonLock(QObject):
     def acquire_lock(self):
         """Acquire singleton lock with stale cleanup"""
         self._cleanup_stale_locks()
-        
         # Try to connect to existing instance first
         existing_port = self._read_port_file()
         if existing_port and self._try_connect_to_existing(existing_port):
             return None  # Existing instance found
-        
         # Try to create new lock
         sock = self._create_lock()
         if sock:
@@ -420,7 +430,6 @@ class SingletonLock(QObject):
         port = self._read_port_file()
         if not port:
             return False
-        
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(1.0)
@@ -484,8 +493,10 @@ class SingletonLock(QObject):
             self.lockfile_path.write_text(str(self.lock_port))
             if Config.SYSTEM == "Windows":
                 try:
-                    subprocess.run(["attrib", "+H", str(self.lockfile_path)], 
-                                 capture_output=True, check=True)
+                    subprocess.run(
+                        ["attrib", "+H", str(self.lockfile_path)], 
+                        capture_output=True, check=True
+                    )
                 except:
                     pass
         except Exception as e:
@@ -533,8 +544,10 @@ class FileManager:
         Config.APPDATA_DIR.mkdir(parents=True, exist_ok=True)
         if Config.SYSTEM == "Windows":
             try:
-                subprocess.run(["attrib", "+H", str(Config.APPDATA_DIR)], 
-                             capture_output=True, check=True)
+                subprocess.run(
+                    ["attrib", "+H", str(Config.APPDATA_DIR)], 
+                    capture_output=True, check=True
+                )
             except subprocess.CalledProcessError:
                 pass
     
@@ -546,8 +559,10 @@ class FileManager:
             try:
                 urllib.request.urlretrieve(Config.ICON_URL, Config.APP_ICON)
                 if Config.SYSTEM == "Windows":
-                    subprocess.run(["attrib", "+H", str(Config.APP_ICON)], 
-                                 capture_output=True, check=True)
+                    subprocess.run(
+                        ["attrib", "+H", str(Config.APP_ICON)], 
+                        capture_output=True, check=True
+                    )
             except Exception as e:
                 print(f"Failed to download icon: {e}")
                 Config.APP_ICON.touch()
@@ -806,11 +821,11 @@ class Styles:
     
     @classmethod
     def get_base_style(cls, mode: str) -> str:
-        return cls.BASE_STYLES.get(mode, cls.BASE_STYLES["Dark"])
+        return cls.BASE_STYLES.get(mode, cls.BASE_STYLES[Config.DEFAULT_THEME])
     
     @classmethod
-    def get_button_style(cls, theme: str, appearance: str = "Dark") -> str:
-        theme_config = cls.COLOR_THEMES.get(theme, cls.COLOR_THEMES["Blue"])
+    def get_button_style(cls, theme: str, appearance: str = Config.DEFAULT_THEME) -> str:
+        theme_config = cls.COLOR_THEMES.get(theme, cls.COLOR_THEMES[Config.DEFAULT_COLOR])
         base_color = theme_config["base"]
         hover_color = theme_config["hover"]
         
@@ -866,7 +881,7 @@ class UIManager:
     
     def create_header(self) -> QWidget:
         layout = QHBoxLayout()
-        header_label = QLabel(f"⚙️ {Config.APP_NAME}")
+        header_label = QLabel(f"⚙️{Config.APP_NAME}")
         header_label.setStyleSheet("font-size: 22px; font-weight: bold;")
 
         try:
@@ -894,10 +909,10 @@ class UIManager:
         group = QGroupBox("🖱️ Click Settings")
         form = QFormLayout()
         
-        self.widgets['click_count'] = QLineEdit("1")
-        self.widgets['loop_count'] = QLineEdit("0")
-        self.widgets['click_delay'] = QLineEdit("1")
-        self.widgets['cycle_delay'] = QLineEdit("0.5")
+        self.widgets['click_count'] = QLineEdit(Config.DEFAULT_SETTINGS["click_count"])
+        self.widgets['loop_count'] = QLineEdit(Config.DEFAULT_SETTINGS["loop_count"])
+        self.widgets['click_delay'] = QLineEdit(Config.DEFAULT_SETTINGS["click_delay"])
+        self.widgets['cycle_delay'] = QLineEdit(Config.DEFAULT_SETTINGS["cycle_delay"])
         
         form.addRow("Clicks per Cycle:", self.widgets['click_count'])
         form.addRow("Max Cycles (0=∞):", self.widgets['loop_count'])
@@ -1081,10 +1096,10 @@ class ClickerEngine:
             try: return float(widget.text() or default)
             except: return default
         return {
-            'clicks': max(1, safe_int(widgets.get('click_count'), 1)),
-            'max_loops': safe_int(widgets.get('loop_count'), 0),
-            'click_delay': max(0.01, safe_float(widgets.get('click_delay'), 1.0)),
-            'cycle_delay': max(0.01, safe_float(widgets.get('cycle_delay'), 0.5))
+            'clicks': max(1, safe_int(widgets.get('click_count'), Config.DEFAULT_SETTINGS["click_count"])),
+            'max_loops': safe_int(widgets.get('loop_count'), Config.DEFAULT_SETTINGS["loop_count"]),
+            'click_delay': max(0.01, safe_float(widgets.get('click_delay'), Config.DEFAULT_SETTINGS["click_delay"])),
+            'cycle_delay': max(0.01, safe_float(widgets.get('cycle_delay'), Config.DEFAULT_SETTINGS["cycle_delay"]))
         }
 
 class AutoClickerApp(QMainWindow):
@@ -1095,8 +1110,8 @@ class AutoClickerApp(QMainWindow):
         
         self.latest_version = self.current_version
         self.update_checker = None
-        self.current_appearance = "Dark"
-        self.current_color_theme = "Blue"
+        self.current_appearance = Config.DEFAULT_THEME
+        self.current_color_theme = Config.DEFAULT_COLOR
         
         self.ui = UIManager(self)
         self.tray = SystemTrayManager(self)
@@ -1137,17 +1152,17 @@ class AutoClickerApp(QMainWindow):
         settings_layout.addWidget(self.ui.create_click_settings())
         settings_layout.addWidget(self.ui.create_theme_settings())
         settings_layout.addStretch()
-        tabs.addTab(settings_tab, "Settings")
-        
+
+        tabs.addTab(settings_tab, "⚙️ Settings")
         updates_tab = self.ui.create_update_tab()
-        tabs.addTab(updates_tab, "Updates")
+        tabs.addTab(updates_tab, "📜 Updates")
         
         log_tab = QWidget()
         log_layout = QVBoxLayout(log_tab)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
         log_layout.addWidget(self.log_text)
-        tabs.addTab(log_tab, "Activity Log")
+        tabs.addTab(log_tab, "📜 Activity Log")
         
         layout.addWidget(tabs)
     
@@ -1201,7 +1216,7 @@ class AutoClickerApp(QMainWindow):
     def update_theme(self, appearance: str = None):
         if appearance is None and 'appearance_combo' in self.ui.widgets:
             appearance = self.ui.widgets['appearance_combo'].currentText()
-        self.current_appearance = appearance or "Dark"
+        self.current_appearance = appearance or Config.DEFAULT_THEME
         self.setStyleSheet(Styles.get_base_style(self.current_appearance))
         Styles.apply_theme_to_all_buttons(self, self.current_color_theme, self.current_appearance)
         self.update_color_theme()
@@ -1209,12 +1224,12 @@ class AutoClickerApp(QMainWindow):
     def update_color_theme(self, theme: str = None):
         if theme is None and 'color_combo' in self.ui.widgets:
             theme = self.ui.widgets['color_combo'].currentText()
-        self.current_color_theme = theme or "Blue"
+        self.current_color_theme = theme or Config.DEFAULT_COLOR
         Styles.apply_theme_to_all_buttons(self, self.current_color_theme, self.current_appearance)
     
     def log(self, message: str):
         timestamp = time.strftime("%H:%M:%S")
-        self.log_text.append(f"[{timestamp}] {message}")
+        self.log_text.append(f"[{timestamp}]: {message}")
         self.log_text.verticalScrollBar().setValue(self.log_text.verticalScrollBar().maximum())
     
     def _on_version_fetched(self, latest_version: str):
@@ -1236,6 +1251,8 @@ class AutoClickerApp(QMainWindow):
         )
         if reply == QMessageBox.Yes:
             webbrowser.open(info['download_url'])
+        else:
+            print("Said No")
         self.log(f"🆕 Update available: v{info['version']}")
     
     def _on_check_completed(self, success: bool, message: str):
@@ -1304,14 +1321,16 @@ class ApplicationLauncher:
             # Show custom dialog for existing instance
             dialog = InstanceDialog(lock.lockfile_path)
             result = dialog.exec()
-            
             if result == QDialog.Accepted:  # Bring to front
                 if lock.activate_existing():
                     print("Activated existing instance")
                     sys.exit(0)
                 else:
-                    QMessageBox.critical(None, "❌ Error", 
-                                    "Could not activate existing instance.\nPlease close other instances and try again.")
+                    QMessageBox.critical(
+                        None,
+                        "❌ Error", 
+                        "Could not activate existing instance.\nPlease close other instances and try again."
+                    )
                     sys.exit(1)
             elif result == 2:  # Force new instance
                 # Clean up existing lock and try again
@@ -1322,17 +1341,18 @@ class ApplicationLauncher:
                     lock.release_lock()
                 except:
                     pass
-                
                 # Try to acquire lock again
                 acquired = lock.acquire_lock()
                 if acquired is None:
-                    QMessageBox.critical(None, "❌ Error", 
-                                    "Could not create new instance. Another instance may still be running.")
+                    QMessageBox.critical(
+                        None,
+                        "❌ Error", 
+                        "Could not create new instance. Another instance may still be running."
+                    )
                     sys.exit(1)
                 print("Forced new instance created")
             else:  # User chose to exit (rejected)
                 sys.exit(0)
-        
         try:
             # Create and show main window
             window = AutoClickerApp(lock)
@@ -1346,9 +1366,4 @@ class ApplicationLauncher:
             lock.release_lock()
 
 if __name__ == "__main__":
-    compat_result = OSCompatibilityChecker.check_compatibility()
-    OSCompatibilityChecker.show_compatibility_dialog(compat_result)
-    if compat_result["compatible"]:
-        ApplicationLauncher.run()
-    else:
-        sys.exit(1)
+    ApplicationLauncher.run()
