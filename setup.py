@@ -99,7 +99,7 @@ class PyInstallerBuilder:
         sleep(1)  # Reduced sleep for faster execution
 
         version = self.load_version("VERSION.txt")
-        executable_name = f"{self.app_name} v{version}" if version else self.app_name
+        executable_name = f"{self.app_name} (v{version})" if version else self.app_name
 
         # Ensure script file exists
         if not os.path.exists(self.script_file):
