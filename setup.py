@@ -108,8 +108,9 @@ class PyInstallerBuilder:
             pyinstaller_args = [
                 "--noconfirm",
                 "--onefile",
-                f"--name={executable_name}",
+                "--noconsole",
                 "--windowed",
+                f"--name={executable_name}",
                 "--icon=src\\Assets\\icons\\mousepointer.ico",
                 "--optimize=2",
                 "--strip",
