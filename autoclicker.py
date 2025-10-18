@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QIcon, QAction
 from PySide6.QtCore import Qt, QTimer, QThread, Signal as pyqtSignal, QObject
+from requests.exceptions import RequestException, HTTPError, ConnectionError, Timeout
 
 # PyAutoGUI settings
 pyautogui.PAUSE = 0
@@ -368,7 +369,7 @@ class ThemeManager:
             "input_bg": "#2e2e3e", "input_fg": "#ffffff", "input_border": "#444",
             "border_color": "#333",
             "tab_bg": "#2e2e3e", "tab_fg": "#aaa",
-            "tab_selected_bg": "#0a84ff", "tab_selected_fg": "#ffffff"
+            "tab_selected_bg": "#6c00c4", "tab_selected_fg": "#ffffff"
         },
         "Light": {
             "main_bg": "#f0f0f0", "main_fg": "#000000",
@@ -377,7 +378,7 @@ class ThemeManager:
             "input_bg": "#ffffff", "input_fg": "#000000", "input_border": "#aaa",
             "border_color": "#ccc",
             "tab_bg": "#e0e0e0", "tab_fg": "#444",
-            "tab_selected_bg": "#0078d7", "tab_selected_fg": "#ffffff"
+            "tab_selected_bg": "#ae22ff", "tab_selected_fg": "#ffffff"
         }
     }
 
@@ -541,7 +542,6 @@ class ThemeManager:
         """
         if logger is None:
             logger = Logger(None)
-
         try:
             hex_color = hex_color.lstrip('#')
             if not ThemeManager._is_valid_hex(f'#{hex_color}'):
@@ -853,27 +853,102 @@ class VersionManager:
 
     @staticmethod
     def fetch_latest_release(timeout: float = 10.0) -> Dict[str, Any]:
-        """Fetch latest release info from GitHub."""
+        """
+        Fetch latest release info from GitHub.
+        
+        Args:
+            timeout (float): Request timeout in seconds. Must be positive.
+            
+        Returns:
+            Dict[str, Any]: Dictionary containing version info and success status.
+        """
+        # Input validation
+        if not isinstance(timeout, (int, float)) or timeout <= 0:
+            return {
+                'version': Config.DEFAULT_VERSION,
+                'success': False,
+                'error': 'Invalid timeout value'
+            }
+
         try:
-            headers = {'Accept': 'application/vnd.github.v3+json', 'User-Agent': Config.APP_NAME}
+            # Validate Config attributes
+            if not hasattr(Config, 'GITHUB_REPO') or not Config.GITHUB_REPO:
+                return {
+                    'version': Config.DEFAULT_VERSION,
+                    'success': False,
+                    'error': 'Missing GitHub repository configuration'
+                }
+
+            headers = {
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': getattr(Config, 'APP_NAME', 'DefaultApp')
+            }
+
             response = requests.get(
                 f"https://api.github.com/repos/{Config.GITHUB_REPO}/releases/latest",
-                headers=headers, timeout=timeout
+                headers=headers,
+                timeout=timeout
             )
             response.raise_for_status()
+
             data = response.json()
-            tag_name = data.get('tag_name', '').lstrip('v')
-            if tag_name and tag_name != Config.DEFAULT_VERSION:
+
+            # Validate required response fields
+            if not isinstance(data, dict):
                 return {
-                    'version': tag_name,
-                    'download_url': data.get('html_url', f"https://github.com/{Config.GITHUB_REPO}/releases/latest"),
-                    'release_notes': data.get('body', 'No release notes available'),
-                    'success': True
+                    'version': Config.DEFAULT_VERSION,
+                    'success': False,
+                    'error': 'Invalid API response format'
                 }
-            return {'version': Config.DEFAULT_VERSION, 'success': False}
+
+            tag_name = data.get('tag_name', '').lstrip('v')
+            
+            # Check if we got a valid version
+            if not tag_name:
+
+                return {
+                    'version': Config.DEFAULT_VERSION,
+                    'success': False,
+                    'error': 'No valid version found'
+                }
+
+            return {
+                'version': tag_name,
+                'download_url': data.get('html_url', f"https://github.com/{Config.GITHUB_REPO}/releases/latest"),
+                'release_notes': data.get('body', 'No release notes available'),
+                'success': True
+            }
+
+        except Timeout:
+            return {
+                'version': Config.DEFAULT_VERSION,
+                'success': False,
+                'error': 'Request timeout'
+            }
+        except ConnectionError:
+            return {
+                'version': Config.DEFAULT_VERSION,
+                'success': False,
+                'error': 'Network connection error'
+            }
+        except HTTPError as e:
+            return {
+                'version': Config.DEFAULT_VERSION,
+                'success': False,
+                'error': f'HTTP error: {str(e)}'
+            }
+        except RequestException as e:
+            return {
+                'version': Config.DEFAULT_VERSION,
+                'success': False,
+                'error': f'Request error: {str(e)}'
+            }
         except Exception as e:
-            Logger(None).log(f"Error fetching release: {e}")
-            return {'version': Config.DEFAULT_VERSION, 'success': False}
+            return {
+                'version': Config.DEFAULT_VERSION,
+                'success': False,
+                'error': f'Unexpected error: {str(e)}'
+            }
 
     @staticmethod
     def get_current_version() -> str:
