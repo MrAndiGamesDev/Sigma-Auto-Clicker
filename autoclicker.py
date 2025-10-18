@@ -65,7 +65,7 @@ class Config:
     LOCK_FILE = APPDATA_DIR / f"app.lock.{LOCK_PORT}"
     
     UPDATE_LOGS = [
-        "2025-10-18: Small Update Improvements much more!",
+        "2025-10-18: Small Update Improvements Tabs Improved and much more!",
         "2025-10-17: UI Improvements and Bug Fixes and much more!",
         "2025-10-16: Fixed app bugs! and much more (part 3)",
         "2025-10-16: Fixed An Update Management Bug and much more! (part 2)",
@@ -197,7 +197,7 @@ class OSCompatibilityChecker:
                         return (major > 10) or (major == 10 and minor >= 15)
                 except:
                     return True # Fallback
-            else: # Linux
+            elif system == "Linux": # Linux
                 # Kernel version check for Linux
                 kernel_parts = release.split('.')
                 if len(kernel_parts) >= 2:
@@ -881,7 +881,7 @@ class UIManager:
     
     def create_header(self) -> QWidget:
         layout = QHBoxLayout()
-        header_label = QLabel(f"⚙️{Config.APP_NAME}")
+        header_label = QLabel(f"🖱️{Config.APP_NAME}")
         header_label.setStyleSheet("font-size: 22px; font-weight: bold;")
 
         try:
@@ -891,7 +891,7 @@ class UIManager:
             print(f"Failed to set window icon: {e}")
 
         self.widgets['version_display'] = QLabel(f"(v{self.parent.current_version})")
-        self.widgets['version_display'].setStyleSheet("font-size: 18px; font-weight: bold; color: #0078d4;")
+        self.widgets['version_display'].setStyleSheet("font-size: 20px; font-weight: bold;")
         
         update_btn = QPushButton("🔄 Check Updates")
         update_btn.clicked.connect(self.parent.check_for_updates)
@@ -1154,15 +1154,15 @@ class AutoClickerApp(QMainWindow):
         settings_layout.addStretch()
 
         tabs.addTab(settings_tab, "⚙️ Settings")
-        updates_tab = self.ui.create_update_tab()
-        tabs.addTab(updates_tab, "📜 Updates")
+        tabs.addTab(self.ui.create_update_tab(), "📜 Updates")
         
         log_tab = QWidget()
         log_layout = QVBoxLayout(log_tab)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
         log_layout.addWidget(self.log_text)
-        tabs.addTab(log_tab, "📜 Activity Log")
+        
+        tabs.addTab(log_tab, "📋 Activity Log")
         
         layout.addWidget(tabs)
     
