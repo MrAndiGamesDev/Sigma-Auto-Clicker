@@ -51,7 +51,7 @@ class Config:
     DEFAULT_VERSION = "1.0.0"
     LOCK_PORT = 49513
     PORTS = "127.0.0.1"
-    DEFAULT_THEME = "Dark"
+    DEFAULT_THEME = "Light"
     DEFAULT_COLOR = "Blue"
     DEFAULT_SETTINGS = {
         "click_count": "1",
@@ -1116,7 +1116,7 @@ class AutoClickerApp(QMainWindow):
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.check_for_updates_silent)
         self.update_timer.start(Config.UPDATE_CHECK_INTERVAL)
-        QTimer.singleShot(5000, self.check_for_updates)
+        QTimer.singleShot(7000, self.check_for_updates)
 
     def toggle_clicking(self) -> None:
         """Toggle the clicker engine."""
