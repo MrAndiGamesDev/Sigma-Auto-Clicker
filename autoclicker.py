@@ -54,6 +54,7 @@ class Config:
     PORTS = "127.0.0.1"
     DEFAULT_THEME = "Dark"
     DEFAULT_COLOR = "Blue"
+    DEFAULT_ADMIN_MODE = False
     DEFAULT_SETTINGS = {
         "click_count": "1",
         "loop_count": "0",
@@ -76,21 +77,22 @@ class Config:
     VERSION_FILE = APPDATA_DIR / "current_version.txt"
     VERSION_CACHE_FILE = APPDATA_DIR / "version_cache.txt"
     LOCK_FILE = APPDATA_DIR / f"app.lock.{LOCK_PORT}"
+    ADMIN_MODE_FILE = APPDATA_DIR / "admin_mode.txt"
 
     UPDATE_LOGS = [
         {
             "date": "2025-10-19",
             "version": "1.1.0",
             "description": (
-                "Improved tab navigation and layout for better usability. "
+                "Added admin mode toggle for enhanced functionality. "
+                "Improved tab navigation and layout. "
                 "Optimized performance for lower resource usage. "
-                "UI/Code Improvements: Enhanced accessibility with ARIA labels and keyboard navigation. "
-                "Added support for dark mode toggle with automatic system theme detection. "
-                "Fixed bugs related to session persistence and data caching. "
-                "Introduced new API endpoints for real-time data syncing. "
-                "Improved error handling for network interruptions. "
-                "Security enhancements: Upgraded encryption protocols for data transmission. "
-                "And so much more!!"
+                "Enhanced accessibility with ARIA labels. "
+                "Added dark mode toggle with system theme detection. "
+                "Fixed bugs related to session persistence and caching. "
+                "Introduced API endpoints for data syncing. "
+                "Improved error handling for network issues. "
+                "Upgraded encryption protocols for data transmission."
             ),
         },
         {
@@ -159,20 +161,8 @@ class Config:
 
     @staticmethod
     def format_update_logs(separator: str = "\n", logger: Optional[Logger] = None, bullet: str = "•") -> str:
-        """
-        Format update logs for display with a clean, structured plain text layout.
-
-        Args:
-            separator (str): Separator between log entries (default: dashed line).
-            logger (Optional[Logger]): Logger instance for reporting issues (default: None).
-            bullet (str): Bullet character for description items (default: "•").
-
-        Returns:
-            str: Formatted update logs or a fallback message if no logs are available.
-        """
-        if logger is None:
-            logger = Logger(None)
-
+        """Format update logs for display."""
+        logger = logger or Logger(None)
         if not Config.UPDATE_LOGS:
             logger.log("⚠️ No update logs available.")
             return "No update logs available."
@@ -180,27 +170,15 @@ class Config:
         formatted_entries = []
         for index, log in enumerate(Config.UPDATE_LOGS):
             try:
-                # Validate required keys
                 if not all(key in log for key in ["date", "version", "description"]):
                     logger.log(f"⚠️ Invalid update log entry at index {index}: Missing required keys")
                     continue
-
-                # Split description into bullet points
                 description = log["description"].strip()
-                bullet_points = []
-                if description:
-                    # Split by sentences or specific phrases, removing trailing punctuation
-                    points = description.replace(" and so much more!", "").replace("And so much more!!", "").split(". ")
-                    bullet_points = [p.strip() for p in points if p.strip()]
-                    # Handle "and so much more" as a separate bullet
-                    if "and so much more" in description.lower():
-                        bullet_points.append("Various additional improvements")
-
-                # Format bullet points with indentation
-                bullet_list = "\n".join(f"  {bullet} {point}" for point in bullet_points) if bullet_points else f"  {bullet} No details provided."
-
-                # Format the entry
-                entry = f"Version{log['version']} ({log['date']}){separator.rstrip()}\n{bullet_list}"
+                bullet_points = [p.strip() for p in description.split(". ") if p.strip()]
+                if "and so much more" in description.lower():
+                    bullet_points.append("Various additional improvements")
+                bullet_list = "\n".join(f"  {bullet} {point}" for point in bullet_points) or f"  {bullet} No details provided."
+                entry = f"Version {log['version']} ({log['date']}){separator.rstrip()}\n{bullet_list}"
                 formatted_entries.append(entry)
             except Exception as e:
                 logger.log(f"⚠️ Error formatting update log entry at index {index}: {e}")
@@ -209,36 +187,30 @@ class Config:
         if not formatted_entries:
             logger.log("⚠️ No valid update log entries found.")
             return "No valid update logs available."
-
-        # Add header and final separator
         footer = "=" * 39
         header = f"🖱️ {Config.APP_NAME} Update History 🖱️\n{footer}\n"
         return f"{header}{separator.join(formatted_entries)}\n{footer}\n"
-    
+
     @staticmethod
     def load_hotkey() -> str:
         """Load the custom hotkey from file, fallback to default."""
-        try:
-            if Config.HOTKEY_FILE.exists():
-                with open(Config.HOTKEY_FILE, 'r', encoding='utf-8') as f:
-                    hotkey = f.read().strip()
-                    if hotkey:
-                        return hotkey
-            return Config.HOTKEY
-        except Exception as e:
-            print(f"Error loading hotkey from {Config.HOTKEY_FILE}: {e}")
-            return Config.HOTKEY
+        return FileManager.read_file(Config.HOTKEY_FILE, Config.HOTKEY)
 
     @staticmethod
     def save_hotkey(hotkey: str) -> None:
         """Save the custom hotkey to file."""
-        try:
-            FileManager.ensure_app_directory()
-            with open(Config.HOTKEY_FILE, 'w', encoding='utf-8') as f:
-                f.write(hotkey.strip())
-            print(f"Saved hotkey '{hotkey}' to {Config.HOTKEY_FILE}")
-        except Exception as e:
-            print(f"Error saving hotkey to {Config.HOTKEY_FILE}: {e}")
+        FileManager.write_file(Config.HOTKEY_FILE, hotkey.strip())
+
+    @staticmethod
+    def load_admin_mode() -> bool:
+        """Load admin mode state from file, fallback to default."""
+        content = FileManager.read_file(Config.ADMIN_MODE_FILE, str(Config.DEFAULT_ADMIN_MODE).lower())
+        return content.lower() == 'true'
+
+    @staticmethod
+    def save_admin_mode(admin_mode: bool) -> None:
+        """Save admin mode state to file."""
+        FileManager.write_file(Config.ADMIN_MODE_FILE, str(admin_mode).lower())
 
 class FileManager:
     """Handles file operations and persistence."""
@@ -248,12 +220,9 @@ class FileManager:
         Config.APPDATA_DIR.mkdir(parents=True, exist_ok=True)
         if Config.SYSTEM == "Windows":
             try:
-                for path in [Config.APPDATA_DIR, Config.HOTKEY_FILE, Config.APP_ICON]:
+                for path in [Config.APPDATA_DIR, Config.HOTKEY_FILE, Config.APP_ICON, Config.ADMIN_MODE_FILE]:
                     if path.exists():
-                        subprocess.run(
-                            ["attrib", "+H", str(path)],
-                            capture_output=True, check=True
-                        )
+                        subprocess.run(["attrib", "+H", str(path)], capture_output=True, check=True)
             except subprocess.CalledProcessError as e:
                 Logger(None).log(f"Failed to hide file {path}: {e}")
 
@@ -341,12 +310,11 @@ class HotkeyManager:
             return True
         except Exception as e:
             self.logger.log(f"❌ Failed to set hotkey '{new_hotkey}': {e}")
-            self.register_hotkey(self.current_hotkey, callback)  # Revert
+            self.register_hotkey(self.current_hotkey, callback)
             return False
 
 class ThemeManager:
     """Manages application themes and styles for consistent UI appearance."""
-    
     # Common style properties shared across themes
     _BASE_STYLE_TEMPLATE = """
         QMainWindow {{ background-color: {main_bg}; color: {main_fg}; }}
@@ -365,7 +333,6 @@ class ThemeManager:
         QTabBar::tab:selected {{ background: {tab_selected_bg}; color: {tab_selected_fg}; }}
     """
 
-    # Theme definitions with color values
     BASE_STYLES = {
         "Dark": {
             "main_bg": "#1e1e2e", "main_fg": "#ffffff",
@@ -421,71 +388,32 @@ class ThemeManager:
 
     @classmethod
     def apply_theme(cls, widget: QWidget, appearance: str, color_theme: str, logger: Optional[Logger] = None) -> None:
-        """
-        Apply theme and color to the widget and its buttons.
-
-        Args:
-            widget (QWidget): The widget to apply the theme to.
-            appearance (str): The base theme (e.g., 'Dark', 'Light').
-            color_theme (str): The color theme for buttons (e.g., 'Blue').
-            logger (Optional[Logger]): Logger instance for reporting issues.
-        """
-        if logger is None:
-            logger = Logger(None)
-
-        # Validate appearance
+        """Apply theme and color to the widget and its buttons."""
+        logger = logger or Logger(None)
         appearance = appearance if appearance in cls.BASE_STYLES else Config.DEFAULT_THEME
         if appearance not in cls.BASE_STYLES:
             logger.log(f"⚠️ Invalid appearance '{appearance}', falling back to {Config.DEFAULT_THEME}")
-
-        # Apply base styles
         try:
             style_config = cls.BASE_STYLES[appearance]
-            stylesheet = cls._BASE_STYLE_TEMPLATE.format(**style_config)
-            widget.setStyleSheet(stylesheet)
-        except Exception as e:
-            logger.log(f"❌ Error applying base style for '{appearance}': {e}")
-            widget.setStyleSheet(cls._BASE_STYLE_TEMPLATE.format(**cls.BASE_STYLES[Config.DEFAULT_THEME]))
-
-        # Apply button styles
-        try:
+            widget.setStyleSheet(cls._BASE_STYLE_TEMPLATE.format(**style_config))
             button_style = cls.get_button_style(color_theme, appearance, logger)
             for button in widget.findChildren(QPushButton):
                 button.setStyleSheet(button_style)
         except Exception as e:
-            logger.log(f"❌ Error applying button style for '{color_theme}': {e}")
+            logger.log(f"❌ Error applying theme '{appearance}' or color '{color_theme}': {e}")
+            widget.setStyleSheet(cls._BASE_STYLE_TEMPLATE.format(**cls.BASE_STYLES[Config.DEFAULT_THEME]))
 
     @staticmethod
     def get_button_style(theme: str, appearance: str, logger: Optional[Logger] = None) -> str:
-        """
-        Generate button style for the given theme and appearance.
-
-        Args:
-            theme (str): The color theme (e.g., 'Blue').
-            appearance (str): The base theme (e.g., 'Dark', 'Light').
-            logger (Optional[Logger]): Logger instance for reporting issues.
-
-        Returns:
-            str: The stylesheet for buttons.
-        """
-        if logger is None:
-            logger = Logger(None)
-
-        # Validate color theme
+        """Generate button style for the given theme and appearance."""
+        logger = logger or Logger(None)
         theme = theme if theme in ThemeManager.COLOR_THEMES else Config.DEFAULT_COLOR
-        if theme not in ThemeManager.COLOR_THEMES:
-            logger.log(f"⚠️ Invalid color theme '{theme}', falling back to {Config.DEFAULT_COLOR}")
-
         theme_config = ThemeManager.COLOR_THEMES[theme]
         base_color = theme_config["base"]
         hover_color = theme_config["hover"]
-
-        # Adjust colors for Light theme
         if appearance == "Light":
             base_color = ThemeManager._darken_color(base_color, 0.1, logger)
             hover_color = ThemeManager._darken_color(hover_color, 0.15, logger)
-
-        # Validate colors
         if not ThemeManager._is_valid_hex(base_color) or not ThemeManager._is_valid_hex(hover_color):
             logger.log(f"⚠️ Invalid color values in theme '{theme}', falling back to default")
             theme_config = ThemeManager.COLOR_THEMES[Config.DEFAULT_COLOR]
@@ -494,29 +422,12 @@ class ThemeManager:
             if appearance == "Light":
                 base_color = ThemeManager._darken_color(base_color, 0.1, logger)
                 hover_color = ThemeManager._darken_color(hover_color, 0.15, logger)
-
-        # Button style template
         button_template = """
-            QPushButton {{
-                background-color: {base_color};
-                color: white;
-                border: none;
-                border-radius: 5px;
-                padding: 6px 12px;
-                font-weight: bold;
-                font-size: 12px;
-                min-height: 20px;
-            }}
-            QPushButton:hover {{
-                background-color: {hover_color};
-            }}
-            QPushButton:pressed {{
-                background-color: {pressed_color};
-            }}
-            QPushButton:disabled {{
-                background-color: #666;
-                color: #999;
-            }}
+            QPushButton {{ background-color: {base_color}; color: white; border: none; border-radius: 5px; 
+                          padding: 6px 12px; font-weight: bold; font-size: 12px; min-height: 20px; }}
+            QPushButton:hover {{ background-color: {hover_color}; }}
+            QPushButton:pressed {{ background-color: {pressed_color}; }}
+            QPushButton:disabled {{ background-color: #666; color: #999; }}
         """
         try:
             return button_template.format(
@@ -534,19 +445,8 @@ class ThemeManager:
 
     @staticmethod
     def _darken_color(hex_color: str, factor: float, logger: Optional[Logger] = None) -> str:
-        """
-        Darken a hex color by a factor.
-
-        Args:
-            hex_color (str): The hex color code (e.g., '#ffffff').
-            factor (float): The darkening factor (0.0 to 1.0).
-            logger (Optional[Logger]): Logger instance for reporting issues.
-
-        Returns:
-            str: The darkened hex color code.
-        """
-        if logger is None:
-            logger = Logger(None)
+        """Darken a hex color by a factor."""
+        logger = logger or Logger(None)
         try:
             hex_color = hex_color.lstrip('#')
             if not ThemeManager._is_valid_hex(f'#{hex_color}'):
@@ -560,15 +460,7 @@ class ThemeManager:
 
     @staticmethod
     def _is_valid_hex(hex_color: str) -> bool:
-        """
-        Validate if a string is a valid hex color code.
-
-        Args:
-            hex_color (str): The hex color code to validate.
-
-        Returns:
-            bool: True if valid, False otherwise.
-        """
+        """Validate if a string is a valid hex color code."""
         try:
             if not isinstance(hex_color, str) or not hex_color.startswith('#'):
                 return False
@@ -594,7 +486,7 @@ class OSCompatibilityChecker:
     }
 
     @classmethod
-    def check_compatibility(cls, logger: Logger) -> Dict[str, Any]:
+    def check_compatibility(cls, logger: Logger, require_admin: bool = False) -> Dict[str, Any]:
         """Perform comprehensive OS compatibility check."""
         system = Config.SYSTEM
         release = Config.RELEASE
@@ -618,6 +510,8 @@ class OSCompatibilityChecker:
         missing_libs = cls._check_libraries(platform_config["required_libs"])
         if missing_libs:
             result["errors"].extend([f"Missing library: {lib}" for lib in missing_libs])
+        if require_admin and not cls._is_admin_or_elevated():
+            result["errors"].append("Administrator privileges required for admin mode")
         if platform_config.get("admin_warning", False) and not cls._is_admin_or_elevated():
             result["warnings"].append("Administrator privileges may be required")
         if platform_config.get("pyautogui", False) and not cls._check_pyautogui_support():
@@ -662,6 +556,25 @@ class OSCompatibilityChecker:
                 return ctypes.windll.shell32.IsUserAnAdmin()
             return os.geteuid() == 0
         except:
+            return False
+
+    @staticmethod
+    def request_admin_privileges() -> bool:
+        """Attempt to restart the application with admin privileges."""
+        try:
+            if Config.SYSTEM == "Windows":
+                import ctypes
+                if not ctypes.windll.shell32.IsUserAnAdmin():
+                    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
+                    return False
+                return True
+            else:
+                if os.geteuid() != 0:
+                    subprocess.run(["sudo", sys.executable] + sys.argv, check=False)
+                    return False
+                return True
+        except Exception as e:
+            Logger(None).log(f"Failed to request admin privileges: {e}")
             return False
 
     @staticmethod
@@ -834,8 +747,7 @@ class VersionManager:
         if version:
             FileManager.write_file(Config.VERSION_FILE, version)
             return version
-        version = FileManager.read_file(Config.VERSION_FILE)
-        return version or Config.DEFAULT_VERSION
+        return FileManager.read_file(Config.VERSION_FILE, Config.DEFAULT_VERSION)
 
     @staticmethod
     def get_cached_latest() -> Optional[str]:
@@ -858,102 +770,34 @@ class VersionManager:
 
     @staticmethod
     def fetch_latest_release(timeout: float = 10.0) -> Dict[str, Any]:
-        """
-        Fetch latest release info from GitHub.
-        
-        Args:
-            timeout (float): Request timeout in seconds. Must be positive.
-            
-        Returns:
-            Dict[str, Any]: Dictionary containing version info and success status.
-        """
-        # Input validation
+        """Fetch latest release info from GitHub."""
         if not isinstance(timeout, (int, float)) or timeout <= 0:
-            return {
-                'version': Config.DEFAULT_VERSION,
-                'success': False,
-                'error': 'Invalid timeout value'
-            }
-
+            return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': 'Invalid timeout value'}
         try:
-            # Validate Config attributes
-            if not hasattr(Config, 'GITHUB_REPO') or not Config.GITHUB_REPO:
-                return {
-                    'version': Config.DEFAULT_VERSION,
-                    'success': False,
-                    'error': 'Missing GitHub repository configuration'
-                }
-
-            headers = {
-                'Accept': 'application/vnd.github.v3+json',
-                'User-Agent': getattr(Config, 'APP_NAME', 'DefaultApp')
-            }
-
+            if not Config.GITHUB_REPO:
+                return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': 'Missing GitHub repository configuration'}
+            headers = {'Accept': 'application/vnd.github.v3+json', 'User-Agent': Config.APP_NAME}
             response = requests.get(
                 f"https://api.github.com/repos/{Config.GITHUB_REPO}/releases/latest",
-                headers=headers,
-                timeout=timeout
+                headers=headers, timeout=timeout
             )
             response.raise_for_status()
-
             data = response.json()
-
-            # Validate required response fields
             if not isinstance(data, dict):
-                return {
-                    'version': Config.DEFAULT_VERSION,
-                    'success': False,
-                    'error': 'Invalid API response format'
-                }
-
+                return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': 'Invalid API response format'}
             tag_name = data.get('tag_name', '').lstrip('v')
-            
-            # Check if we got a valid version
             if not tag_name:
-
-                return {
-                    'version': Config.DEFAULT_VERSION,
-                    'success': False,
-                    'error': 'No valid version found'
-                }
-
+                return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': 'No valid version found'}
             return {
                 'version': tag_name,
                 'download_url': data.get('html_url', f"https://github.com/{Config.GITHUB_REPO}/releases/latest"),
                 'release_notes': data.get('body', 'No release notes available'),
                 'success': True
             }
-
-        except Timeout:
-            return {
-                'version': Config.DEFAULT_VERSION,
-                'success': False,
-                'error': 'Request timeout'
-            }
-        except ConnectionError:
-            return {
-                'version': Config.DEFAULT_VERSION,
-                'success': False,
-                'error': 'Network connection error'
-            }
-        except HTTPError as e:
-            return {
-                'version': Config.DEFAULT_VERSION,
-                'success': False,
-                'error': f'HTTP error: {str(e)}'
-            }
-        except RequestException as e:
-            return {
-                'version': Config.DEFAULT_VERSION,
-                'success': False,
-                'error': f'Request error: {str(e)}'
-            }
+        except (Timeout, ConnectionError, HTTPError, RequestException) as e:
+            return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': str(e)}
         except Exception as e:
-            return {
-                'version': Config.DEFAULT_VERSION,
-                'success': False,
-                'error': f'Unexpected error: {str(e)}'
-            }
+            return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': f'Unexpected error: {str(e)}'}
 
     @staticmethod
     def get_current_version() -> str:
@@ -1030,7 +874,7 @@ class UIManager:
     def create_header(self) -> QWidget:
         """Create the header with version and update button."""
         layout = QHBoxLayout()
-        header_label = QLabel(f"🖱️{Config.APP_NAME}")
+        header_label = QLabel(f"🖱️ {Config.APP_NAME}")
         header_label.setStyleSheet("font-size: 22px; font-weight: bold;")
         self.widgets['version_display'] = QLabel(f"(v{self.parent.current_version})")
         self.widgets['version_display'].setStyleSheet("font-size: 20px; font-weight: bold;")
@@ -1068,7 +912,7 @@ class UIManager:
         return group
 
     def create_theme_settings(self) -> QGroupBox:
-        """Create theme settings group box."""
+        """Create theme settings group box with admin mode toggle."""
         group = QGroupBox("🎨 Interface")
         form = QFormLayout()
         self.widgets['appearance_combo'] = QComboBox()
@@ -1077,10 +921,13 @@ class UIManager:
         self.widgets['color_combo'] = QComboBox()
         self.widgets['color_combo'].addItems(list(ThemeManager.COLOR_THEMES.keys()))
         self.widgets['color_combo'].currentTextChanged.connect(self.parent.update_color_theme)
+        self.widgets['admin_mode_toggle'] = QPushButton("Enable Admin Mode")
+        self.widgets['admin_mode_toggle'].clicked.connect(self.parent.toggle_admin_mode)
         self.widgets['progress_label'] = QLabel("Cycles: 0")
         self.widgets['progress_label'].setAlignment(Qt.AlignRight)
         form.addRow("Appearance Mode:", self.widgets['appearance_combo'])
         form.addRow("Color Theme:", self.widgets['color_combo'])
+        form.addRow("Admin Mode:", self.widgets['admin_mode_toggle'])
         form.addRow("Progress:", self.widgets['progress_label'])
         group.setLayout(form)
         return group
@@ -1160,6 +1007,10 @@ class UIManager:
         self.widgets['last_check_label'].setText(f"Last Check: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         self.parent.tray.update_tooltip()
 
+    def update_admin_mode_button(self, is_admin: bool) -> None:
+        """Update the admin mode toggle button text."""
+        self.widgets['admin_mode_toggle'].setText("Disable Admin Mode" if is_admin else "Enable Admin Mode")
+
 class SystemTrayManager:
     """Manages system tray functionality."""
     def __init__(self, parent, logger: Logger):
@@ -1183,7 +1034,8 @@ class SystemTrayManager:
     def update_tooltip(self) -> None:
         """Update system tray tooltip."""
         if self.tray_icon:
-            self.tray_icon.setToolTip(f"{Config.APP_NAME} (v{self.parent.current_version})")
+            mode = "Admin" if self.parent.is_admin_mode else "Normal"
+            self.tray_icon.setToolTip(f"{Config.APP_NAME} (v{self.parent.current_version}, {mode} Mode)")
 
     def create_tray_menu(self) -> QMenu:
         """Create system tray menu."""
@@ -1191,6 +1043,7 @@ class SystemTrayManager:
         actions = [
             ("👁️ Show", self.parent.show_normal),
             (f"▶️ Start/Stop ({self.parent.hotkey_manager.current_hotkey})", self.parent.toggle_clicking),
+            (f"{'🔓 Disable' if self.parent.is_admin_mode else '🔒 Enable'} Admin Mode", self.parent.toggle_admin_mode),
             ("🔄 Check Updates", self.parent.check_for_updates),
             (None, None),
             ("❌ Quit", self.parent.quit_app)
@@ -1206,7 +1059,7 @@ class SystemTrayManager:
         return menu
 
     def update_tray_menu(self) -> None:
-        """Update tray menu with current hotkey."""
+        """Update tray menu with current hotkey and admin mode."""
         if self.tray_icon:
             self.tray_icon.setContextMenu(self.create_tray_menu())
 
@@ -1222,10 +1075,15 @@ class ClickerEngine:
         self.logger = logger
         self.running = False
         self.thread = None
+        self.require_admin = Config.SYSTEM == "Windows"  # Require admin on Windows for clicking
 
     def start(self) -> None:
         """Start the clicker engine."""
         if self.running:
+            return
+        if self.require_admin and not self.parent.is_admin_mode:
+            self.logger.log("❌ Admin mode required for clicking on this system")
+            QMessageBox.warning(None, "Admin Mode Required", "Please enable Admin Mode to use the clicker functionality.")
             return
         self.running = True
         self.parent.start_btn.setEnabled(False)
@@ -1288,13 +1146,14 @@ class AutoClickerApp(QMainWindow):
     def __init__(self, lock: SingletonLock):
         super().__init__()
         self.lock = lock
-        self.logger = Logger(None)  # Initialize before UI
+        self.logger = Logger(None)
         self.current_version = VersionManager.get_current_version()
         self.hotkey_manager = HotkeyManager(self.logger)
         self.latest_version = self.current_version
         self.update_checker = None
         self.current_appearance = Config.DEFAULT_THEME
         self.current_color_theme = Config.DEFAULT_COLOR
+        self.is_admin_mode = Config.load_admin_mode()
         self.ui = UIManager(self, self.logger)
         self.tray = SystemTrayManager(self, self.logger)
         self.clicker = ClickerEngine(self, self.logger)
@@ -1303,6 +1162,8 @@ class AutoClickerApp(QMainWindow):
         self._setup_timers()
         self.hotkey_manager.register_hotkey(self.hotkey_manager.current_hotkey, self.toggle_clicking)
         self.ui.widgets['update_text'].setPlainText(Config.format_update_logs())
+        self._update_admin_mode_ui()
+        self._check_admin_mode_compatibility()
         self.update_theme()
 
     def _init_ui(self) -> None:
@@ -1318,7 +1179,6 @@ class AutoClickerApp(QMainWindow):
         self._setup_tabs(layout)
         self._setup_controls(layout)
         self.ui.update_version_display(self.current_version)
-        ThemeManager.apply_theme(self, self.current_appearance, self.current_color_theme)
         try:
             icon_path = FileManager.download_icon()
             self.setWindowIcon(QIcon(icon_path))
@@ -1362,7 +1222,37 @@ class AutoClickerApp(QMainWindow):
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.check_for_updates_silent)
         self.update_timer.start(Config.UPDATE_CHECK_INTERVAL)
-        QTimer.singleShot(7000, self.check_for_updates)
+        QTimer.singleShot(10000, self.check_for_updates)
+
+    def _check_admin_mode_compatibility(self) -> None:
+        """Check compatibility for admin mode."""
+        if self.is_admin_mode:
+            compat_result = OSCompatibilityChecker.check_compatibility(self.logger, require_admin=True)
+            if not compat_result["compatible"]:
+                self.logger.log("⚠️ Admin mode not supported, switching to non-admin mode")
+                self.is_admin_mode = False
+                Config.save_admin_mode(False)
+                self._update_admin_mode_ui()
+                OSCompatibilityChecker.show_compatibility_dialog(compat_result, self.logger)
+
+    def toggle_admin_mode(self) -> None:
+        """Toggle between admin and non-admin modes."""
+        if self.is_admin_mode:
+            self.is_admin_mode = False
+            Config.save_admin_mode(False)
+            self.logger.log("🔓 Switched to non-admin mode")
+        else:
+            if OSCompatibilityChecker.request_admin_privileges():
+                self.is_admin_mode = True
+                Config.save_admin_mode(True)
+                self.logger.log("🔒 Switched to admin mode")
+        self._update_admin_mode_ui()
+
+    def _update_admin_mode_ui(self) -> None:
+        """Update UI elements related to admin mode."""
+        self.ui.update_admin_mode_button(self.is_admin_mode)
+        self.tray.update_tray_menu()
+        ThemeManager.apply_theme(self, self.current_appearance, self.current_color_theme)
 
     def toggle_clicking(self) -> None:
         """Toggle the clicker engine."""
