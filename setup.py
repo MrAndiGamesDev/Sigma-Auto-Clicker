@@ -109,20 +109,20 @@ class PyInstallerBuilder:
         # Define PyInstaller arguments
         pyinstaller_args = [
             self.script_file,
-            "--noconfirm",          # Overwrite output without confirmation
-            "--onefile",            # Create a single executable file
-            "--windowed",           # Ensure no console window (same as --noconsole)
-            f"--name={executable_name}",  # Set executable name
-            "--icon=src\\Assets\\icons\\mousepointer.ico",  # Icon path
-            "--optimize=2",         # Optimize bytecode
-            "--clean",              # Clean PyInstaller cache
-            "--add-data=src\\Assets\\icons\\mousepointer.ico;src\\Assets\\icons\\",  # Include icon
-            "--add-data=VERSION.txt;.",  # Include VERSION.txt
-            "--hidden-import=PySide6",  # Ensure PySide6 is included
-            "--hidden-import=pyautogui",  # Ensure pyautogui is included
-            "--hidden-import=keyboard",   # Ensure keyboard is included
-            "--hidden-import=psutil",     # Ensure psutil is included
-            "--hidden-import=requests"    # Ensure requests is included
+            "--noconfirm",                                                              # Overwrite output without confirmation
+            "--onefile",                                                                # Create a single executable file
+            "--windowed",                                                               # Ensure no console window (same as --noconsole)
+            f"--name={executable_name}",                                                # Set executable name
+            "--icon=src\\Assets\\icons\\mousepointer.ico",                              # Icon path
+            "--optimize=2",                                                             # Optimize bytecode
+            "--clean",                                                                  # Clean PyInstaller cache
+            "--add-data=src\\Assets\\icons\\mousepointer.ico;src\\Assets\\icons\\",     # Include icon
+            "--add-data=VERSION.txt;.",                                                 # Include VERSION.txt
+            "--hidden-import=PySide6",                                                  # Ensure PySide6 is included
+            "--hidden-import=pyautogui",                                                # Ensure pyautogui is included
+            "--hidden-import=keyboard",                                                 # Ensure keyboard is included
+            "--hidden-import=psutil",                                                   # Ensure psutil is included
+            "--hidden-import=requests"                                                  # Ensure requests is included
         ]
 
         try:
@@ -139,7 +139,7 @@ class PyInstallerBuilder:
         sleep(duration)
         sys.exit(lvl)
 
-    def run(self) -> None:
+    def run(self, Duration=2) -> None:
         """Main method to clean directories and build the executable."""
         self.Logging("info", f"Starting build process for '{self.script_file}'...")
         try:
@@ -148,7 +148,7 @@ class PyInstallerBuilder:
             self.Logging("success", "Build process completed successfully.")
         except Exception as e:
             self.Logging("error", f"Build process failed: {e}")
-            self.exit_script(2)
+            self.exit_script(Duration)
 
 if __name__ == "__main__":
     PyConverter = PyInstallerBuilder()
