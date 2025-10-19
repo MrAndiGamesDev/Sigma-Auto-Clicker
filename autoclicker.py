@@ -423,8 +423,7 @@ class ThemeManager:
                 base_color = ThemeManager._darken_color(base_color, 0.1, logger)
                 hover_color = ThemeManager._darken_color(hover_color, 0.15, logger)
         button_template = """
-            QPushButton {{ background-color: {base_color}; color: white; border: none; border-radius: 5px; 
-                          padding: 6px 12px; font-weight: bold; font-size: 12px; min-height: 20px; }}
+            QPushButton {{ background-color: {base_color}; color: white; border: none; border-radius: 5px; padding: 4px 8px; font-weight: bold; font-size: 12px; min-height: 16px; }}
             QPushButton:hover {{ background-color: {hover_color}; }}
             QPushButton:pressed {{ background-color: {pressed_color}; }}
             QPushButton:disabled {{ background-color: #666; color: #999; }}
