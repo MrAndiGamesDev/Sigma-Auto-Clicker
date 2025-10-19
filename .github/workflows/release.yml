@@ -71,7 +71,7 @@ jobs:
             
             ## Changes
             - Built with Python 3.11 and PyInstaller.
-            - Executable: [Sigma-Auto-Clicker.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Sigma-Auto-Clicker.exe)
+            - Executable: [Sigma-Auto-Clicker.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Sigma.Auto.Clicker.exe)
             
             ## Installation
             1. Download the .exe file.
