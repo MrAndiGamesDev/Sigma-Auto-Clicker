@@ -1,8 +1,8 @@
-from time import sleep
-from pathlib import Path
 import subprocess
 import sys
 import logging
+from time import sleep
+from pathlib import Path
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -97,10 +97,10 @@ class VirtualEnvManager:
         sleep(duration)
         sys.exit(lvl)
 
-def run(duration: int):
+def run(duration: int, EnvName: str):
     """Main entry point for the script."""
     try:
-        venv_manager = VirtualEnvManager("AutoClickerPy")
+        venv_manager = VirtualEnvManager(EnvName)
         if not venv_manager.manage_venv():
             venv_manager.exit_script(duration)
     except Exception as e:
@@ -108,4 +108,4 @@ def run(duration: int):
         venv_manager.exit_script(duration)
 
 if __name__ == "__main__":
-    run(2)  # Adjust duration as needed
+    run(2, "AutoClickerPy")  # Adjust duration as needed
