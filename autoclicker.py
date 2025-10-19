@@ -1245,6 +1245,9 @@ class AutoClickerApp(QMainWindow):
                 self.is_admin_mode = True
                 Config.save_admin_mode(True)
                 self.logger.log("🔒 Switched to admin mode")
+            else:
+                self.quit_app()
+                return
         self._update_admin_mode_ui()
 
     def _update_admin_mode_ui(self) -> None:
