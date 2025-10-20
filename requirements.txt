@@ -8,4 +8,4 @@ colorama
 requests
 psutil
 pynput
-pytest
+autopep8
