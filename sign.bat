@@ -1,25 +1,65 @@
 @ECHO OFF
+SETLOCAL EnableDelayedExpansion
+
 REM ================================
-REM Configuration - edit these lines
+REM Configuration
 REM ================================
-SET PFX_FILE=certificate.pfx
-SET PFX_PASSWORD=
+SET "CERT_FILE=certificate.pfx"
+SET "TIMESTAMP_SERVER=http://timestamp.digicert.com"
+SET "SIGN_ALGORITHM=sha256"
 SET /P VERSION=<VERSION.txt
-SET FILE_TO_SIGN=.\Sigma Auto Clicker (v%VERSION%).exe
-SET TIMESTAMP_URL=http://timestamp.digicert.com
+SET "FILE_TO_SIGN=.\Sigma Auto Clicker (v%VERSION%).exe"
+SET "ENV_FILE=.env"
+SET "PASSWORD_KEY=PFX_PASSWORD"
 
 REM ================================
-REM Signing the file
+REM Load password from .env
 REM ================================
-signtool.exe sign /f "%PFX_FILE%" /p "%PFX_PASSWORD%" /tr "%TIMESTAMP_URL%" /td sha256 /fd sha256 "%FILE_TO_SIGN%"
-
-REM ================================
-REM Check result
-REM ================================
-IF %ERRORLEVEL% EQU 0 (
-    ECHO Signing completed successfully.
-) ELSE (
-    ECHO Signing failed with error code %ERRORLEVEL%.
+IF NOT EXIST "%ENV_FILE%" (
+    ECHO ERROR: %ENV_FILE% file not found!
+    GOTO :ERROR
 )
 
+SET "CERT_PASSWORD="
+FOR /F "tokens=1,2 delims== " %%A IN (%ENV_FILE%) DO (
+    IF /I "%%A"=="%PASSWORD_KEY%" (
+        SET "CERT_PASSWORD=%%B"
+    )
+)
+
+IF NOT DEFINED CERT_PASSWORD (
+    ECHO ERROR: %PASSWORD_KEY% not found in %ENV_FILE%!
+    GOTO :ERROR
+)
+
+REM ================================
+REM Sign the file
+REM ================================
+ECHO Signing "%FILE_TO_SIGN%"...
+signtool.exe sign /f "%CERT_FILE%" /p "%CERT_PASSWORD%" /tr "%TIMESTAMP_SERVER%" /td %SIGN_ALGORITHM% /fd %SIGN_ALGORITHM% "%FILE_TO_SIGN%"
+IF %ERRORLEVEL% NEQ 0 GOTO :SIGNING_FAILED
+
+REM ================================
+REM Success
+REM ================================
+ECHO Signing completed successfully.
+GOTO :END
+
+REM ================================
+REM Error handling
+REM ================================
+:SIGNING_FAILED
+ECHO ERROR: Signing failed with error code %ERRORLEVEL%.
+GOTO :ERROR
+
+:ERROR
+ECHO.
+ECHO Script execution failed.
 PAUSE
+EXIT /B 1
+
+:END
+ECHO.
+ECHO Script completed.
+PAUSE
+EXIT /B 0
