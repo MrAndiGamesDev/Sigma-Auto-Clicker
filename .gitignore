@@ -12,7 +12,6 @@ build/
 develop-eggs/
 dist/
 downloads/
-AutoClickerPy/
 AutoClickerPy/*
 eggs/
 .eggs/
@@ -29,7 +28,7 @@ share/python-wheels/
 pip-wheel-metadata/
 certificate.*
 sign.*
-signtool.exe
+*.exe
 MANIFEST
 
 # PyInstaller
