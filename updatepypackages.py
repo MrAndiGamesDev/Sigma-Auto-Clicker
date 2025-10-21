@@ -1,6 +1,6 @@
 import subprocess
 import sys
-from typing import List, Optional
+from typing import List
 from time import sleep
 from src.Packages.CustomLogging import Logging
 
@@ -72,16 +72,16 @@ class PackageUpdater:
         sleep(duration)
         sys.exit(lvl)
 
-def run():
+def run(duration: int):
     """Main entry point for the script."""
     try:
         updater = PackageUpdater()
         success = updater.update()
         if not success:
-            updater.exit_script(2)
+            updater.exit_script(duration)
     except Exception as e:
         Logging.Log("error", f"Unexpected error in main: {e}")
-        updater.exit_script(2)
+        updater.exit_script(duration)
 
 if __name__ == "__main__":
-    run()
+    run(2)

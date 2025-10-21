@@ -5,11 +5,10 @@ import requests
 import subprocess
 import tempfile
 
-# GitHub configuration
-GITHUB_API_RELEASES = "https://api.github.com/repos/MrAndiGamesDev/Sigma-Auto-Clicker/releases"
-SCRIPT_NAME = "autoclicker.py"  # <-- This is the file we expect to find in releases
-SCRIPT_URL_TEMPLATE = "https://github.com/MrAndiGamesDev/Sigma-Auto-Clicker/releases/download/{tag}/" + SCRIPT_NAME
-SCRIPT_URL_LATEST = "https://github.com/MrAndiGamesDev/Sigma-Auto-Clicker/releases/latest/download/" + SCRIPT_NAME
+# GitHub configuration for dev branch
+AUTHER_NAME = "MrAndiGamesDev"
+REPO_NAME = "Sigma-Auto-Clicker"
+SCRIPT_URL = f"https://raw.githubusercontent.com/{AUTHER_NAME}/{REPO_NAME}/dev/autoclicker.py"
 
 def is_admin():
     """Check if the script is running with admin privileges."""
@@ -17,21 +16,6 @@ def is_admin():
         return ctypes.windll.shell32.IsUserAnAdmin()
     except Exception:
         return False
-
-def get_latest_prerelease_tag():
-    """Get the latest pre-release tag from GitHub API."""
-    try:
-        response = requests.get(GITHUB_API_RELEASES, timeout=10)
-        response.raise_for_status()
-        releases = response.json()
-
-        for release in releases:
-            if release.get('prerelease'):
-                return release.get('tag_name')
-        return None
-    except Exception as e:
-        print(f"❌ Error fetching release data: {e}")
-        return None
 
 def download_script(url):
     """Download the Python script content from the URL."""
@@ -69,15 +53,8 @@ def main():
         print("❌ This script is intended for Windows only.")
         sys.exit(1)
 
-    tag = get_latest_prerelease_tag()
-    if tag:
-        script_url = SCRIPT_URL_TEMPLATE.format(tag=tag)
-        print(f"🔄 Using latest pre-release: {tag}")
-    else:
-        print("ℹ️  No pre-release found. Falling back to latest full release.")
-        script_url = SCRIPT_URL_LATEST
-
-    script_content = download_script(script_url)
+    print("🔄 Fetching autoclicker.py from dev branch...")
+    script_content = download_script(SCRIPT_URL)
     if not script_content:
         print("❌ Failed to download the Python script.")
         sys.exit(1)

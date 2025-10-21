@@ -23,8 +23,10 @@ class PyInstallerBuilder:
     def cleanup_dirs(self) -> None:
         """Remove build, dist directories, and .spec files if they exist."""
         # Clean directories
-        for folder in ["build", "dist"]:
-            if os.path.exists(folder):
+        folders = ["build", "dist"]
+        for folder in folders:
+            Exists = os.path.exists(folder)
+            if Exists:
                 self.Logging("info", f"Removing '{folder}' directory...")
                 sleep(1)  # Reduced sleep for faster cleanup
                 try:

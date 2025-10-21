@@ -4,7 +4,7 @@ REM Configuration - edit these lines
 REM ================================
 SET PFX_FILE=certificate.pfx
 SET PFX_PASSWORD=
-SET /P VERSION=<version.txt
+SET /P VERSION=<VERSION.txt
 SET FILE_TO_SIGN=.\Sigma Auto Clicker (v%VERSION%).exe
 SET TIMESTAMP_URL=http://timestamp.digicert.com
 
@@ -21,6 +21,5 @@ IF %ERRORLEVEL% EQU 0 (
 ) ELSE (
     ECHO Signing failed with error code %ERRORLEVEL%.
 )
-
 
 PAUSE
