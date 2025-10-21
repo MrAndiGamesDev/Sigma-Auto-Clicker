@@ -4,7 +4,6 @@ on:
     types: [labeled, unlabeled, synchronize, opened, ready_for_review, reopened]
     branches:
       - stable  # Restrict to PRs targeting dev branch
-      - dev
   pull_request_review:
     types: [submitted]
   check_suite:
