@@ -9,10 +9,11 @@ import argparse
 # GitHub configuration
 AUTHOR_NAME = "MrAndiGamesDev"
 REPO_NAME = "Sigma-Auto-Clicker"
-BRANCH = "stable"
+BRANCH = os.getenv("SIGMA_BRANCH", "dev")  # Default to dev, override with env var
 BASE_RAW_URL = f"https://raw.githubusercontent.com/{AUTHOR_NAME}/{REPO_NAME}/{BRANCH}"
-VERSION_URL = f"{BASE_RAW_URL}/version.txt"  # Try root first
-VERSION_URL_SUBDIR = f"{BASE_RAW_URL}/VERSION.txt"  # Fallback to src/
+BASE_RELEASE_URL = f"https://github.com/{AUTHOR_NAME}/{REPO_NAME}/releases/download"
+VERSION_URL = f"{BASE_RAW_URL}/version.txt"  # Root version.txt
+VERSION_URL_SUBDIR = f"{BASE_RAW_URL}/src/version.txt"  # Fallback to src/
 SCRIPT_URL = f"{BASE_RAW_URL}/autoclicker.py"  # Primary script
 SCRIPT_URL_SUBDIR = f"{BASE_RAW_URL}/src/autoclicker.py"  # Fallback to src/
 SCRIPT_URL_DEV = f"{BASE_RAW_URL}/autoclickerdev.py"  # Fallback for renamed script
@@ -34,15 +35,23 @@ def get_version():
             if not version:
                 print(f"❌ Error: version.txt at {url} is empty.")
                 continue
+            if not version.replace(".", "").isdigit():
+                print(f"❌ Error: version.txt at {url} contains invalid version: {version}")
+                continue
             return version
         except Exception as e:
             print(f"❌ Error fetching version.txt from {url}: {e}")
-    print("⚠️ No valid version.txt found in root or src/. Proceeding without version.")
+    print(f"⚠️ No valid version.txt found in {BRANCH} branch (root or src/).")
     return None
 
-def download_script():
-    """Download the Python script content (try multiple URLs)."""
-    urls = [SCRIPT_URL, SCRIPT_URL_SUBDIR, SCRIPT_URL_DEV]
+def download_script(version=None):
+    """Download the Python script content (try release, then raw URLs)."""
+    urls = []
+    if version:
+        # Try release URL first if version is available
+        urls.append(f"{BASE_RELEASE_URL}/v{version}/autoclicker.py")
+    urls.extend([SCRIPT_URL, SCRIPT_URL_SUBDIR, SCRIPT_URL_DEV])
+
     for url in urls:
         try:
             response = requests.get(url, timeout=10)
@@ -80,7 +89,18 @@ def run_python_script(script_content):
 def main():
     parser = argparse.ArgumentParser(description="Sigma Auto Clicker Launcher")
     parser.add_argument('--version-only', action='store_true', help="Print version and exit")
+    parser.add_argument('--branch', help="GitHub branch to fetch from (overrides SIGMA_BRANCH env var)")
     args = parser.parse_args()
+
+    if args.branch:
+        global BRANCH, BASE_RAW_URL, VERSION_URL, VERSION_URL_SUBDIR, SCRIPT_URL, SCRIPT_URL_SUBDIR, SCRIPT_URL_DEV
+        BRANCH = args.branch
+        BASE_RAW_URL = f"https://raw.githubusercontent.com/{AUTHOR_NAME}/{REPO_NAME}/{BRANCH}"
+        VERSION_URL = f"{BASE_RAW_URL}/version.txt"
+        VERSION_URL_SUBDIR = f"{BASE_RAW_URL}/src/version.txt"
+        SCRIPT_URL = f"{BASE_RAW_URL}/autoclicker.py"
+        SCRIPT_URL_SUBDIR = f"{BASE_RAW_URL}/src/autoclicker.py"
+        SCRIPT_URL_DEV = f"{BASE_RAW_URL}/autoclickerdev.py"
 
     if os.name != 'nt':
         print("❌ This script is intended for Windows only.")
@@ -93,19 +113,19 @@ def main():
             print(f"Sigma Auto Clicker version: {version}")
             sys.exit(0)
         else:
-            print("❌ Failed to fetch version.txt.")
+            print(f"❌ Failed to fetch version.txt from {BRANCH} branch.")
             sys.exit(1)
 
     if version:
-        print(f"🔄 Fetching Sigma Auto Clicker version {version} from dev branch...")
+        print(f"🔄 Fetching Sigma Auto Clicker version {version} from {BRANCH} branch...")
     else:
-        print("⚠️ Could not fetch version.txt. Attempting to download script from dev branch.")
+        print(f"⚠️ Could not fetch version.txt. Attempting to download script from {BRANCH} branch.")
 
     # Download and run the script
-    script_content = download_script()
+    script_content = download_script(version)
     if not script_content:
-        print("❌ Failed to download autoclicker.py or autoclickerdev.py from dev branch.")
-        print("ℹ️ Check the repository at https://github.com/MrAndiGamesDev/Sigma-Auto-Clicker/tree/dev for correct file paths.")
+        print(f"❌ Failed to download autoclicker.py or autoclickerdev.py from {BRANCH} branch.")
+        print(f"ℹ️ Check the repository at https://github.com/{AUTHOR_NAME}/{REPO_NAME}/tree/{BRANCH} for correct file paths.")
         sys.exit(1)
 
     run_python_script(script_content)
