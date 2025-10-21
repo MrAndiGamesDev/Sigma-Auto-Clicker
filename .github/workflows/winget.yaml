@@ -49,7 +49,7 @@ jobs:
           ShortDescription: A Python-based auto-clicker tool.
           InstallerType: custom
           Installers:
-          - InstallerUrl: https://github.com/YourUsername/Sigma-Auto-Clicker/archive/refs/tags/v${{ github.event.release.tag_name }}.zip
+          - InstallerUrl: https://github.com/MrAndiGamesDev/Sigma-Auto-Clicker/archive/refs/tags/v${{ github.event.release.tag_name }}.zip
             InstallerSwitches:
               Custom: pip install --user .
           ManifestType: installer
