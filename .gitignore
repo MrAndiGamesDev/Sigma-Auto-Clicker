@@ -29,7 +29,7 @@ share/python-wheels/
 pip-wheel-metadata/
 certificate.*
 sign.*
-signtool.exe
+*.exe
 MANIFEST
 
 # PyInstaller
