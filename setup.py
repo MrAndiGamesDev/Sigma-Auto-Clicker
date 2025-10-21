@@ -3,155 +3,158 @@ import shutil
 import sys
 import PyInstaller.__main__
 from time import sleep
-from typing import Optional
+from typing import Optional, List
 from src.Packages.CustomLogging import Logging
 
 class PyInstallerBuilder:
-    """Handles cleaning build directories and building executables using PyInstaller."""
+    """Manages the build process for creating executables using PyInstaller."""
+    
     def __init__(self, script_file: Optional[str] = None):
         """
-        Initialize the PyInstallerBuilder.
+        Initialize the PyInstallerBuilder with script file and configuration.
 
         Args:
-            script_file (Optional[str]): Path to the main script file to build. Defaults to sys.argv[1] or 'autoclicker.py'.
+            script_file (Optional[str]): Path to the main script file to build.
+                Defaults to sys.argv[1] or 'autoclicker.py'.
         """
-        self.Logging = Logging.Log
-        self.FirePyinstaller = PyInstaller.__main__
+        self.logger = Logging.Log
         self.script_file = script_file or (sys.argv[1] if len(sys.argv) > 1 else "autoclicker.py")
         self.app_name = "Sigma Auto Clicker"
+        self.version_file = "VERSION.txt"
+        self.icon_path = "src/Assets/icons/mousepointer.ico"
+        
+        # Validate critical paths
+        self._validate_script_file()
+        
+        # PyInstaller configuration
+        self.pyinstaller_args = [
+            self.script_file,
+            "--noconfirm",
+            "--onefile",
+            "--windowed",
+            f"--name={self._get_executable_name()}",
+            f"--icon={self.icon_path}",
+            "--optimize=2",
+            "--clean",
+            f"--add-data={self.icon_path};src/Assets/icons/",
+            f"--add-data={self.version_file};.",
+            "--hidden-import=PySide6",
+            "--hidden-import=pyautogui",
+            "--hidden-import=keyboard",
+            "--hidden-import=psutil",
+            "--hidden-import=requests"
+        ]
+
+    def _validate_script_file(self) -> None:
+        """Validate that the script file exists."""
+        if not os.path.exists(self.script_file):
+            self.logger("error", f"Script file '{self.script_file}' not found.")
+            self._exit_script()
+
+    def _get_executable_name(self) -> str:
+        """Generate executable name with version if available."""
+        version = self._load_version()
+        return f"{self.app_name} (v{version})" if version else self.app_name
+
+    def _load_version(self) -> str:
+        """Load version from VERSION.txt, return empty string if failed."""
+        try:
+            if os.path.exists(self.version_file):
+                with open(self.version_file, 'r', encoding='utf-8') as file:
+                    return file.read().strip()
+            self.logger("warning", f"Version file '{self.version_file}' not found.")
+            return ""
+        except Exception as e:
+            self.logger("warning", f"Failed to load version from '{self.version_file}': {e}")
+            return ""
+
+    def _remove_directory(self, path: str) -> None:
+        """Remove a directory if it exists."""
+        if os.path.exists(path):
+            self.logger("info", f"Removing '{path}' directory...")
+            try:
+                shutil.rmtree(path, ignore_errors=True)
+                self.logger("success", f"'{path}' directory removed successfully.")
+            except Exception as e:
+                self.logger("warning", f"Failed to remove '{path}': {e}")
+        else:
+            self.logger("info", f"'{path}' directory not found — skipping.")
+
+    def _remove_file(self, file_path: str) -> bool:
+        """Remove a file if it exists, return True if removed."""
+        if os.path.exists(file_path):
+            self.logger("info", f"Removing '{file_path}'...")
+            try:
+                os.remove(file_path)
+                self.logger("success", f"'{file_path}' removed successfully.")
+                return True
+            except Exception as e:
+                self.logger("warning", f"Failed to remove '{file_path}': {e}")
+        return False
 
     def cleanup_dirs(self) -> None:
-        """Remove build, dist directories, and .spec files if they exist."""
+        """Remove build, dist directories, and .spec files."""
         # Clean directories
-        folders = ["build", "dist"]
-        for folder in folders:
-            Exists = os.path.exists(folder)
-            if Exists:
-                self.Logging("info", f"Removing '{folder}' directory...")
-                sleep(1)  # Reduced sleep for faster cleanup
-                try:
-                    shutil.rmtree(folder, ignore_errors=True)
-                    self.Logging("success", f"'{folder}' directory removed successfully.")
-                except Exception as e:
-                    self.Logging("warning", f"Failed to remove '{folder}': {e}")
-            else:
-                self.Logging("info", f"'{folder}' directory not found — skipping.")
+        for folder in ["build", "dist"]:
+            self._remove_directory(folder)
 
-        # Clean spec files
-        self.cleanup_spec_files()
-
-    def cleanup_spec_files(self) -> None:
-        """Remove all possible .spec files that might have been generated."""
+        # Clean .spec files
         possible_spec_names = [
             f"{os.path.splitext(self.script_file)[0]}.spec",
             "Sigma_Auto_Clicker.spec",
-            "SigmaAutoClicker.spec"
+            "SigmaAutoClicker.spec",
+            f"{self._get_executable_name().replace(' ', '_').replace('(', '').replace(')', '')}.spec"
         ]
-
-        # Add versioned spec name
-        version = self.load_version("VERSION.txt")
-        if version:
-            safe_name = "".join(c for c in f"{self.app_name} v{version}" if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            safe_name = safe_name.replace(' ', '_').replace('(', '').replace(')', '')
-            possible_spec_names.append(f"{safe_name}.spec")
 
         removed_count = 0
+        # Remove known spec files
         for spec_file in possible_spec_names:
-            if os.path.exists(spec_file):
-                self.Logging("info", f"Removing '{spec_file}' spec file...")
-                sleep(0.5)  # Reduced sleep for faster cleanup
-                try:
-                    os.remove(spec_file)
-                    self.Logging("success", f"'{spec_file}' removed successfully.")
-                    removed_count += 1
-                except Exception as e:
-                    self.Logging("warning", f"Failed to remove '{spec_file}': {e}")
+            if self._remove_file(spec_file):
+                removed_count += 1
 
-        # Handle any additional .spec files in the directory
+        # Remove any additional .spec files
         for file in os.listdir('.'):
             if file.endswith('.spec') and file not in possible_spec_names:
-                self.Logging("info", f"Removing additional spec file '{file}'...")
-                sleep(0.5)
-                try:
-                    os.remove(file)
-                    self.Logging("success", f"'{file}' removed successfully.")
+                if self._remove_file(file):
                     removed_count += 1
-                except Exception as e:
-                    self.Logging("warning", f"Failed to remove '{file}': {e}")
 
         if removed_count == 0:
-            self.Logging("info", "No .spec files found to remove.")
-
-    def load_version(self, path: str) -> str:
-        """Load version from file, return empty string if failed."""
-        try:
-            if os.path.exists(path):
-                with open(path, 'r', encoding='utf-8') as file:
-                    return file.read().strip()
-            else:
-                self.Logging("warning", f"Version file '{path}' not found.")
-                return ""
-        except Exception as e:
-            self.Logging("warning", f"Failed to load version from '{path}': {e}")
-            return ""
+            self.logger("info", "No .spec files found to remove.")
 
     def build_executable(self) -> None:
-        """Build the executable using PyInstaller with no console."""
-        self.Logging("info", f"Building executable for '{self.script_file}'...")
-        sleep(1)  # Reduced sleep for faster execution
-
-        version = self.load_version("VERSION.txt")
-        executable_name = f"{self.app_name} (v{version})" if version else self.app_name
-
-        # Ensure script file exists
-        if not os.path.exists(self.script_file):
-            self.Logging("error", f"Script file '{self.script_file}' not found.")
-            self.exit_script(2)
-
-        # Define PyInstaller arguments
-        pyinstaller_args = [
-            self.script_file,
-            "--noconfirm",                                                              # Overwrite output without confirmation
-            "--onefile",                                                                # Create a single executable file
-            "--windowed",                                                               # Ensure no console window (same as --noconsole)
-            f"--name={executable_name}",                                                # Set executable name
-            "--icon=src\\Assets\\icons\\mousepointer.ico",                              # Icon path
-            "--optimize=2",                                                             # Optimize bytecode
-            "--clean",                                                                  # Clean PyInstaller cache
-            "--add-data=src\\Assets\\icons\\mousepointer.ico;src\\Assets\\icons\\",     # Include icon
-            "--add-data=VERSION.txt;.",                                                 # Include VERSION.txt
-            "--hidden-import=PySide6",                                                  # Ensure PySide6 is included
-            "--hidden-import=pyautogui",                                                # Ensure pyautogui is included
-            "--hidden-import=keyboard",                                                 # Ensure keyboard is included
-            "--hidden-import=psutil",                                                   # Ensure psutil is included
-            "--hidden-import=requests"                                                  # Ensure requests is included
-        ]
-
+        """Build the executable using PyInstaller."""
+        self.logger("info", f"Building executable for '{self.script_file}'...")
         try:
-            self.Logging("info", "Running PyInstaller with arguments: " + " ".join(pyinstaller_args))
-            self.FirePyinstaller.run(pyinstaller_args)
-            self.Logging("success", f"Executable '{executable_name}' built successfully in 'dist' folder.")
+            self.logger("info", "Running PyInstaller with arguments: " + " ".join(self.pyinstaller_args))
+            PyInstaller.__main__.run(self.pyinstaller_args)
+            self.logger("success", f"Executable '{self._get_executable_name()}' built successfully in 'dist' folder.")
         except Exception as e:
-            self.Logging("error", f"PyInstaller build failed: {e}")
-            self.exit_script(2)
+            self.logger("error", f"PyInstaller build failed: {e}")
+            self._exit_script(2)
 
-    def exit_script(self, duration: int = 2, lvl: int = 1) -> None:
+    def _exit_script(self, duration: int = 1, exit_code: int = 1) -> None:
         """Exit the script with a message."""
-        self.Logging("info", "Exiting script.")
+        self.logger("info", "Exiting script.")
         sleep(duration)
-        sys.exit(lvl)
+        sys.exit(exit_code)
 
-    def run(self, Duration=2) -> None:
-        """Main method to clean directories and build the executable."""
-        self.Logging("info", f"Starting build process for '{self.script_file}'...")
+    def run(self, cleanup_delay: float = 0.5) -> None:
+        """
+        Execute the build process: clean directories and build executable.
+
+        Args:
+            cleanup_delay (float): Delay between cleanup operations in seconds.
+        """
+        self.logger("info", f"Starting build process for '{self.script_file}'...")
         try:
             self.cleanup_dirs()
+            sleep(cleanup_delay)
             self.build_executable()
-            self.Logging("success", "Build process completed successfully.")
+            self.logger("success", "Build process completed successfully.")
         except Exception as e:
-            self.Logging("error", f"Build process failed: {e}")
-            self.exit_script(Duration)
+            self.logger("error", f"Build process failed: {e}")
+            self._exit_script(cleanup_delay)
 
 if __name__ == "__main__":
-    PyConverter = PyInstallerBuilder()
-    PyConverter.run()
+    builder = PyInstallerBuilder()
+    builder.run()
