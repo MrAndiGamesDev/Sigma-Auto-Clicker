@@ -1,7 +1,5 @@
 # import os
 
-# print(os.path.join(os.path.dirname(__file__), "Assets", "icons", "mousepointer.ico"))
-
 # from colorama import init, Fore, Style
 # from typing import Optional
 

@@ -3,7 +3,7 @@ name: Sigma Auto Clicker Auto-Merge
 on:
   pull_request:
     branches:
-      - main
+      - stable
       - dev
     types:
       - opened

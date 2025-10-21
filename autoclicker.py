@@ -82,6 +82,13 @@ class Config:
     UPDATE_LOGS = [
         {
             "date": "2025-10-19",
+            "version": "1.1.1",
+            "description": (
+                
+            ),
+        },
+        {
+            "date": "2025-10-19",
             "version": "1.1.0",
             "description": (
                 "Added admin mode toggle for enhanced functionality. "
@@ -155,7 +162,7 @@ class Config:
         {
             "date": "2025-10-13",
             "version": "1.0.0",
-            "description": "Initial release of Sigma Auto Clicker."
+            "description": f"Initial release of {APP_NAME}."
         }
     ]
 

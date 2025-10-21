@@ -3,7 +3,7 @@ import sys
 import logging
 from time import sleep
 from pathlib import Path
-import os
+from typing import Optional
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -85,13 +85,13 @@ class VirtualEnvManager:
             logger.info(f"To use the virtual environment, run in terminal: {activate_cmd}")
         return True
 
-    def exit_script(self, duration: int, lvl: int = 1):
+    def exit_script(self, duration: int, lvl: Optional[int] = 1):
         """Exit the script with a message."""
         logger.info("Exiting script.")
         sleep(duration)
         sys.exit(lvl)
 
-def run(duration: int, env_name: str):
+def run(duration: int, env_name="AutoClickerPy"):
     """Main entry point for the script."""
     try:
         venv_manager = VirtualEnvManager(env_name)
@@ -102,4 +102,4 @@ def run(duration: int, env_name: str):
         venv_manager.exit_script(duration)
 
 if __name__ == "__main__":
-    run(2, "AutoClickerPy")  # Adjust duration as needed
+    run(2)  # Adjust duration as needed

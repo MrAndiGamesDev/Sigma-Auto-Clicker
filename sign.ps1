@@ -20,7 +20,6 @@ if ($existingCert) {
     Write-Host "NotAfter: $($existingCert.NotAfter)" -ForegroundColor Cyan
     $daysLeft = ($existingCert.NotAfter - (Get-Date)).Days
     Write-Host "Days remaining: $daysLeft" -ForegroundColor Cyan
-    
     if ($daysLeft -gt 0) {
         Write-Host "Certificate is still valid. Skipping creation." -ForegroundColor Yellow
         exit
@@ -56,5 +55,4 @@ try {
 
 Write-Host "`nCertificate creation completed successfully!" -ForegroundColor Green
 Write-Host "To use this certificate for signing:" -ForegroundColor Cyan
-
 Write-Host "Set-AuthenticodeSignature -FilePath '$targetexe.exe' -Certificate (Get-ChildItem Cert:\CurrentUser\My\$($cert.Thumbprint))" -ForegroundColor White

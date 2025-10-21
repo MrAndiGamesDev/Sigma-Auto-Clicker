@@ -144,13 +144,13 @@ class WindowsSDKManager:
             self._log("error", f"Failed to manage SDK: {e}")
             return False
 
-    def exit_script(self, duration, lvl=1):
+    def exit_script(self, duration: int, lvl: int = 1):
         """Exit the script with a message."""
         self._log("info", "Exiting script.")
         sleep(duration)
         sys.exit(lvl)
 
-def run(duration):
+def run(duration: int):
     """Main entry point for the script."""
     try:
         sdk_manager = WindowsSDKManager()
