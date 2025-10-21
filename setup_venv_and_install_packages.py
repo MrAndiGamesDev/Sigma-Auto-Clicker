@@ -91,7 +91,7 @@ class VirtualEnvManager:
         sleep(duration)
         sys.exit(lvl)
 
-def run(duration: int, env_name="Sigma-Auto-Clicker-Py"):
+def run(duration: Optional[int] = 2, env_name="Sigma-Auto-Clicker-Py"):
     """Main entry point for the script."""
     try:
         venv_manager = VirtualEnvManager(env_name)
@@ -102,4 +102,4 @@ def run(duration: int, env_name="Sigma-Auto-Clicker-Py"):
         venv_manager.exit_script(duration)
 
 if __name__ == "__main__":
-    run(2)  # Adjust duration as needed
+    run()  # Adjust duration as needed
