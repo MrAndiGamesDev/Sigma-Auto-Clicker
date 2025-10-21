@@ -81,10 +81,10 @@ class Config:
 
     UPDATE_LOGS = [
         {
-            "date": "2025-10-19",
+            "date": "2025-10-21",
             "version": "1.1.1",
             "description": (
-                
+                "Removed admin mode toggle for enhanced functionality. due to a lack of bugs! "
             ),
         },
         {
@@ -207,17 +207,6 @@ class Config:
     def save_hotkey(hotkey: str) -> None:
         """Save the custom hotkey to file."""
         FileManager.write_file(Config.HOTKEY_FILE, hotkey.strip())
-
-    @staticmethod
-    def load_admin_mode() -> bool:
-        """Load admin mode state from file, fallback to default."""
-        content = FileManager.read_file(Config.ADMIN_MODE_FILE, str(Config.DEFAULT_ADMIN_MODE).lower())
-        return content.lower() == 'true'
-
-    @staticmethod
-    def save_admin_mode(admin_mode: bool) -> None:
-        """Save admin mode state to file."""
-        FileManager.write_file(Config.ADMIN_MODE_FILE, str(admin_mode).lower())
 
 class FileManager:
     """Handles file operations and persistence."""
@@ -516,8 +505,6 @@ class OSCompatibilityChecker:
         missing_libs = cls._check_libraries(platform_config["required_libs"])
         if missing_libs:
             result["errors"].extend([f"Missing library: {lib}" for lib in missing_libs])
-        if require_admin and not cls._is_admin_or_elevated():
-            result["errors"].append("Administrator privileges required for admin mode")
         if platform_config.get("admin_warning", False) and not cls._is_admin_or_elevated():
             result["warnings"].append("Administrator privileges may be required")
         if platform_config.get("pyautogui", False) and not cls._check_pyautogui_support():
@@ -552,36 +539,6 @@ class OSCompatibilityChecker:
             except ImportError:
                 missing.append(lib)
         return missing
-
-    @staticmethod
-    def _is_admin_or_elevated() -> bool:
-        """Check if running with administrator privileges."""
-        try:
-            if Config.SYSTEM == "Windows":
-                import ctypes
-                return ctypes.windll.shell32.IsUserAnAdmin()
-            return os.geteuid() == 0
-        except:
-            return False
-
-    @staticmethod
-    def request_admin_privileges() -> bool:
-        """Attempt to restart the application with admin privileges."""
-        try:
-            if Config.SYSTEM == "Windows":
-                import ctypes
-                if not ctypes.windll.shell32.IsUserAnAdmin():
-                    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
-                    return False
-                return True
-            else:
-                if os.geteuid() != 0:
-                    subprocess.run(["sudo", sys.executable] + sys.argv, check=False)
-                    return False
-                return True
-        except Exception as e:
-            Logger(None).log(f"Failed to request admin privileges: {e}")
-            return False
 
     @staticmethod
     def _check_pyautogui_support() -> bool:
@@ -918,7 +875,7 @@ class UIManager:
         return group
 
     def create_theme_settings(self) -> QGroupBox:
-        """Create theme settings group box with admin mode toggle."""
+        """Create theme settings group box with toggle."""
         group = QGroupBox("🎨 Interface")
         form = QFormLayout()
         self.widgets['appearance_combo'] = QComboBox()
@@ -927,13 +884,10 @@ class UIManager:
         self.widgets['color_combo'] = QComboBox()
         self.widgets['color_combo'].addItems(list(ThemeManager.COLOR_THEMES.keys()))
         self.widgets['color_combo'].currentTextChanged.connect(self.parent.update_color_theme)
-        self.widgets['admin_mode_toggle'] = QPushButton("Enable Admin Mode")
-        self.widgets['admin_mode_toggle'].clicked.connect(self.parent.toggle_admin_mode)
         self.widgets['progress_label'] = QLabel("Cycles: 0")
         self.widgets['progress_label'].setAlignment(Qt.AlignRight)
         form.addRow("Appearance Mode:", self.widgets['appearance_combo'])
         form.addRow("Color Theme:", self.widgets['color_combo'])
-        form.addRow("Admin Mode:", self.widgets['admin_mode_toggle'])
         form.addRow("Progress:", self.widgets['progress_label'])
         group.setLayout(form)
         return group
@@ -1013,10 +967,6 @@ class UIManager:
         self.widgets['last_check_label'].setText(f"Last Check: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         self.parent.tray.update_tooltip()
 
-    def update_admin_mode_button(self, is_admin: bool) -> None:
-        """Update the admin mode toggle button text."""
-        self.widgets['admin_mode_toggle'].setText("Disable Admin Mode" if is_admin else "Enable Admin Mode")
-
 class SystemTrayManager:
     """Manages system tray functionality."""
     def __init__(self, parent, logger: Logger):
@@ -1040,8 +990,7 @@ class SystemTrayManager:
     def update_tooltip(self) -> None:
         """Update system tray tooltip."""
         if self.tray_icon:
-            mode = "Admin" if self.parent.is_admin_mode else "Normal"
-            self.tray_icon.setToolTip(f"{Config.APP_NAME} (v{self.parent.current_version}, {mode} Mode)")
+            self.tray_icon.setToolTip(f"{Config.APP_NAME} (v{self.parent.current_version})")
 
     def create_tray_menu(self) -> QMenu:
         """Create system tray menu."""
@@ -1049,7 +998,6 @@ class SystemTrayManager:
         actions = [
             ("👁️ Show", self.parent.show_normal),
             (f"▶️ Start/Stop ({self.parent.hotkey_manager.current_hotkey})", self.parent.toggle_clicking),
-            (f"{'🔓 Disable' if self.parent.is_admin_mode else '🔒 Enable'} Admin Mode", self.parent.toggle_admin_mode),
             ("🔄 Check Updates", self.parent.check_for_updates),
             (None, None),
             ("❌ Quit", self.parent.quit_app)
@@ -1065,7 +1013,7 @@ class SystemTrayManager:
         return menu
 
     def update_tray_menu(self) -> None:
-        """Update tray menu with current hotkey and admin mode."""
+        """Update tray menu with current hotkey."""
         if self.tray_icon:
             self.tray_icon.setContextMenu(self.create_tray_menu())
 
@@ -1081,15 +1029,10 @@ class ClickerEngine:
         self.logger = logger
         self.running = False
         self.thread = None
-        self.require_admin = Config.SYSTEM == "Windows"  # Require admin on Windows for clicking
 
     def start(self) -> None:
         """Start the clicker engine."""
         if self.running:
-            return
-        if self.require_admin and not self.parent.is_admin_mode:
-            self.logger.log("❌ Admin mode required for clicking on this system")
-            QMessageBox.warning(None, "Admin Mode Required", "Please enable Admin Mode to use the clicker functionality.")
             return
         self.running = True
         self.parent.start_btn.setEnabled(False)
@@ -1159,7 +1102,6 @@ class AutoClickerApp(QMainWindow):
         self.update_checker = None
         self.current_appearance = Config.DEFAULT_THEME
         self.current_color_theme = Config.DEFAULT_COLOR
-        self.is_admin_mode = Config.load_admin_mode()
         self.ui = UIManager(self, self.logger)
         self.tray = SystemTrayManager(self, self.logger)
         self.clicker = ClickerEngine(self, self.logger)
@@ -1168,8 +1110,6 @@ class AutoClickerApp(QMainWindow):
         self._setup_timers()
         self.hotkey_manager.register_hotkey(self.hotkey_manager.current_hotkey, self.toggle_clicking)
         self.ui.widgets['update_text'].setPlainText(Config.format_update_logs())
-        self._update_admin_mode_ui()
-        self._check_admin_mode_compatibility()
         self.update_theme()
 
     def _init_ui(self) -> None:
@@ -1229,39 +1169,6 @@ class AutoClickerApp(QMainWindow):
         self.update_timer.timeout.connect(self.check_for_updates_silent)
         self.update_timer.start(Config.UPDATE_CHECK_INTERVAL)
         QTimer.singleShot(10000, self.check_for_updates)
-
-    def _check_admin_mode_compatibility(self) -> None:
-        """Check compatibility for admin mode."""
-        if self.is_admin_mode:
-            compat_result = OSCompatibilityChecker.check_compatibility(self.logger, require_admin=True)
-            if not compat_result["compatible"]:
-                self.logger.log("⚠️ Admin mode not supported, switching to non-admin mode")
-                self.is_admin_mode = False
-                Config.save_admin_mode(False)
-                self._update_admin_mode_ui()
-                OSCompatibilityChecker.show_compatibility_dialog(compat_result, self.logger)
-
-    def toggle_admin_mode(self) -> None:
-        """Toggle between admin and non-admin modes."""
-        if self.is_admin_mode:
-            self.is_admin_mode = False
-            Config.save_admin_mode(False)
-            self.logger.log("🔓 Switched to non-admin mode")
-        else:
-            if OSCompatibilityChecker.request_admin_privileges():
-                self.is_admin_mode = True
-                Config.save_admin_mode(True)
-                self.logger.log("🔒 Switched to admin mode")
-            else:
-                self.quit_app()
-                return
-        self._update_admin_mode_ui()
-
-    def _update_admin_mode_ui(self) -> None:
-        """Update UI elements related to admin mode."""
-        self.ui.update_admin_mode_button(self.is_admin_mode)
-        self.tray.update_tray_menu()
-        ThemeManager.apply_theme(self, self.current_appearance, self.current_color_theme)
 
     def toggle_clicking(self) -> None:
         """Toggle the clicker engine."""
