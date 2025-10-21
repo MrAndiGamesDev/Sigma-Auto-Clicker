@@ -1,37 +1,20 @@
-name: Sigma Auto Clicker Auto-Merge
-
+name: automerge
 on:
   pull_request:
-    branches:
-      - stable
-      - dev
-    types:
-      - opened
-      - reopened
-      - synchronize
-      - ready_for_review
-
-permissions:
-  contents: write # Required for merging PRs
-  pull-requests: write # Required for updating PRs
-
+    types: [labeled, unlabeled, synchronize, opened, edited, ready_for_review, reopened, unlocked]
+  pull_request_review:
+    types: [submitted]
+  check_suite:
+    types: [completed]
 jobs:
-  auto-merge:
+  automerge:
     runs-on: ubuntu-latest
-    if: ${{ !github.event.pull_request.draft }} # Skip draft PRs
-
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
-      # Checkout the repository
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Fetch full history for accurate merge operations
-
-      # Auto-merge pull requests with specific conditions
-      - name: Auto-merge pull request
-        uses: pascalgn/automerge-action@v0.16.0 # Updated to latest stable version
+      - name: Run automerge
+        uses: pascalgn/automerge-action@v0.16.4  # Updated to latest stable version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MERGE_METHOD: squash # Use squash merge for cleaner history
-          MERGE_COMMIT_MESSAGE: "🤖 Auto-merged PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}"
-          PR_TITLE_PREFIX: "[Auto-merged] " # Prefix for merged PR titles
+          LOG_LEVEL: "debug"  # Added for better error diagnostics
