@@ -6,13 +6,17 @@ if (Test-Path $certPath) {
     exit
 }
 
+get-content .env | foreach {
+    $name, $value = $_.split('=')
+}
+
 # Check if certificate already exists in store
-$Authername = "MrAndi Scripted"
-$thumbprint = $null
+$Authername = "MrAndi Scripted LLC"
 $existingCert = Get-ChildItem -Path Cert:\CurrentUser\My | Where-Object { $_.Subject -eq "CN=$Authername" }
 
 $version = Get-Content -Path "VERSION.txt"
-$targetexe = "Sigma Auto Clicker (v$version)"
+$target = "Sigma Auto Clicker (v$version)"
+$executetype = "$target.exe"
 
 if ($existingCert) {
     Write-Host "Certificate for '$Authername' already exists in certificate store." -ForegroundColor Yellow
@@ -38,7 +42,7 @@ try {
     Write-Host "Valid until: $($cert.NotAfter)" -ForegroundColor Cyan
     
     # Export to PFX
-    $pswrd = ConvertTo-SecureString -String "" -Force -AsPlainText
+    $pswrd = ConvertTo-SecureString -String $value -Force -AsPlainText
     Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $pswrd
     
     Write-Host "Certificate exported to '$certPath'" -ForegroundColor Green
@@ -55,4 +59,4 @@ try {
 
 Write-Host "`nCertificate creation completed successfully!" -ForegroundColor Green
 Write-Host "To use this certificate for signing:" -ForegroundColor Cyan
-Write-Host "Set-AuthenticodeSignature -FilePath '$targetexe.exe' -Certificate (Get-ChildItem Cert:\CurrentUser\My\$($cert.Thumbprint))" -ForegroundColor White
+Write-Host "Set-AuthenticodeSignature -FilePath '$executetype' -Certificate (Get-ChildItem Cert:\CurrentUser\My\$($cert.Thumbprint))" -ForegroundColor White
