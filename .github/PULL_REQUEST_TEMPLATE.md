@@ -14,9 +14,6 @@
 <!--[What issue/discussion is related to this PR (if any)]-->
 - Resolves #
 
-## Additional Information
-<!--[Any additional information that reviewers should be aware of.]-->
-
 ## Checklist
 - [ ] My code adheres to the coding and style guidelines of the project.
 - [ ] I have performed a self-review of my own code.
