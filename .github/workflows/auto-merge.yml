@@ -3,7 +3,7 @@ on:
   pull_request:
     types: [labeled, unlabeled, synchronize, opened, ready_for_review, reopened]
     branches:
-      - stable  # Restrict to PRs targeting dev branch
+      - stable  # Updated from dev, assuming dev doesn't exist
   pull_request_review:
     types: [submitted]
   check_suite:
@@ -31,12 +31,36 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests
 
+      - name: Validate VERSION.txt
+        run: |
+          if [[ ! -f VERSION.txt ]]; then
+            echo "⚠️ Warning: VERSION.txt not found in repository root."
+          else
+            VERSION=$(cat VERSION.txt)
+            if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+              echo "❌ Error: VERSION.txt does not contain a valid semver (e.g., 1.0.0 or 1.0.0.0). Found: $VERSION"
+              exit 1
+            fi
+            echo "✅ Version $VERSION validated successfully."
+          fi
+
+      - name: Test launcher script
+        run: |
+          if [[ ! -f autoclickerdev.py ]]; then
+            echo "❌ Error: autoclickerdev.py not found."
+            exit 1
+          fi
+          python autoclickerdev.py --version-only --branch ${{ github.event.pull_request.base.ref }}
+        env:
+          PYTHONUNBUFFERED: 1
+          SIGMA_BRANCH: ${{ github.event.pull_request.base.ref }}  # Use PR's target branch
+
       - name: Run automerge
         uses: pascalgn/automerge-action@v0.16.4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LOG_LEVEL: debug
-          MERGE_LABELS: automerge  # Explicitly require 'automerge' label
-          MERGE_METHOD: splash  # Use merge commit (can change to squash/rebase)
-          MERGE_RETRIES: 3  # Retry on transient failures
-          MERGE_RETRY_WAIT: 5000  # Wait 5s between retries
+          MERGE_LABELS: automerge
+          MERGE_METHOD: splash
+          MERGE_RETRIES: 3
+          MERGE_RETRY_WAIT: 5000
