@@ -3,52 +3,65 @@ name: Publish to WinGet
 on:
   release:
     types: [published]
-  workflow_dispatch:  # Allow manual triggering for testing
+  workflow_dispatch:
 
 jobs:
-  winget-release:
+  publish-winget:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}  # Checkout the release tag
-          fetch-depth: 0  # Full history for version validation
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
 
-      - name: Validate version.txt
-        id: validate-version
+      - name: Validate version
+        id: validate
         run: |
-          if [[ ! -f Sigma-Auto-Clicker\version.txt ]]; then
-            echo "❌ Error: version.txt not found in repository root."
+          VERSION_FILE="version.txt"  # Adjust to Sigma-Auto-Clicker/version.txt if needed
+          if [[ ! -f "$VERSION_FILE" ]]; then
+            echo "❌ Error: $VERSION_FILE not found in repository"
             exit 1
           fi
-          VERSION=$(cat Sigma-Auto-Clicker\version.txt | tr -d '[:space:]')
-          if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
-            echo "❌ Error: version.txt does not contain a valid semver (e.g., 1.0.0 or 1.0.0.0). Found: $VERSION"
+          VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "❌ Error: Invalid version format in $VERSION_FILE. Expected semver (e.g., 1.0.0 or 1.0.0.0). Found: $VERSION"
             exit 1
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "✅ Version $VERSION validated from version.txt."
-
-      - name: Extract and validate release tag
-        id: extract-version
-        run: |
           TAG_VERSION=$(echo "${{ github.event.release.tag_name }}" | sed 's/^v//')
-          REPO_VERSION="${{ steps.validate-version.outputs.version }}"
-          if [[ "$TAG_VERSION" != "$REPO_VERSION" ]]; then
-            echo "❌ Error: Release tag version ($TAG_VERSION) does not match version.txt ($REPO_VERSION)."
+          if [[ "$TAG_VERSION" != "$VERSION" ]]; then
+            echo "❌ Error: Release tag ($TAG_VERSION) does not match $VERSION_FILE ($VERSION)"
             exit 1
           fi
-          # Ensure 4-component version for WinGet (e.g., 1.0.0.0)
-          FORMATTED_VERSION=$(echo "$TAG_VERSION" | awk -F. '{printf "%d.%d.%d.%d", $1, $2, $3, ($4 ? $4 : 0)}')
-          echo "formatted_version=$FORMATTED_VERSION" >> $GITHUB_OUTPUT
-          echo "✅ Release tag $TAG_VERSION validated and formatted as $FORMATTED_VERSION."
+          FORMATTED_VERSION=$(echo "$VERSION" | awk -F. '{printf "%d.%d.%d.%d", $1, $2, $3, ($4 ? $4 : 0)}')
+          echo "version=$FORMATTED_VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Validated version: $FORMATTED_VERSION"
+
+      - name: Create WinGet manifest
+        run: |
+          mkdir -p manifests
+          cat <<EOF > manifests/installer.yaml
+          PackageIdentifier: MrAndiGamesDev.SigmaAutoClicker
+          PackageVersion: ${{ steps.validate.outputs.version }}
+          PackageName: Sigma Auto Clicker
+          Publisher: MrAndiGamesDev
+          License: MIT
+          ShortDescription: A Python-based auto-clicker tool.
+          InstallerType: custom
+          Installers:
+          - InstallerUrl: https://github.com/YourUsername/Sigma-Auto-Clicker/archive/refs/tags/v${{ github.event.release.tag_name }}.zip
+            InstallerSwitches:
+              Custom: pip install --user .
+          ManifestType: installer
+          ManifestVersion: 1.6.0
+          EOF
+          echo "✅ Created manifest: manifests/installer.yaml"
 
       - name: Publish to WinGet
-        uses: vedantmgoyal9/winget-releaser@v2  # Fixed to latest stable release (v2)
+        uses: vedantmgoyal9/winget-releaser@v2
         with:
           identifier: MrAndiGamesDev.SigmaAutoClicker
-          version: ${{ steps.extract-version.outputs.formatted_version }}
+          version: ${{ steps.validate.outputs.version }}
           token: ${{ secrets.WINGET_TOKEN }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Required for winget-releaser
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
