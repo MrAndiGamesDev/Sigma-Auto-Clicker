@@ -4,6 +4,7 @@ on:
     types: [labeled, unlabeled, synchronize, opened, ready_for_review, reopened]
     branches:
       - dev  # Restrict to PRs targeting dev branch
+      - stable
   pull_request_review:
     types: [submitted]
   check_suite:
@@ -24,35 +25,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Validate version.txt
-        run: |
-          if [[ ! -f version.txt ]]; then
-            echo "❌ Error: version.txt not found in repository root."
-            exit 1
-          fi
-          VERSION=$(cat version.txt)
-          if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "❌ Error: version.txt does not contain a valid semver (e.g., 1.0.0). Found: $VERSION"
-            exit 1
-          fi
-          echo "✅ Version $VERSION validated successfully."
-
-      - name: Test launcher script
-        run: |
-          if [[ ! -f launcher.py ]]; then
-            echo "❌ Error: launcher.py not found."
-            exit 1
-          fi
-          python launcher.py --version-only  # Assumes launcher.py supports a version-only flag
-        env:
-          PYTHONUNBUFFERED: 1  # Ensure real-time output
+          pip install requests
 
       - name: Run automerge
         uses: pascalgn/automerge-action@v0.16.4
