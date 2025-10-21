@@ -1,6 +1,6 @@
 # 🚀 Sigma Auto Clicker
 
-[![](https://dcbadge.limes.pink/api/server/https://discord.gg/55NEJJRWa5?theme=default-inverted&style=for-the-badge)](https://discord.gg/55NEJJRWa5)
+[![Join our Community Discord server to chat with other users in the MrAndi's Kingdom community.](https://dcbadge.limes.pink/api/server/https://discord.gg/55NEJJRWa5?theme=default-inverted&style=for-the-badge)](https://discord.gg/55NEJJRWa5)
 
 **Sigma Auto Clicker** is a high-performance automation tool designed to simplify repetitive clicking tasks.  
 
