@@ -131,6 +131,13 @@ class Config(metaclass=_MetaConfig):
     UPDATE_LOGS: Final[List[UpdateLogEntry]] = [
         UpdateLogEntry(
             date="2025-10-22",
+            version="1.1.2-beta.1",
+            description=(
+                "Integrated Discord Rich Presence (Currently broken) removed for now. "
+            ),
+        ),
+        UpdateLogEntry(
+            date="2025-10-22",
             version="1.1.2",
             description=(
                 "Enhanced admin mode toggle with improved functionality. "
@@ -138,7 +145,6 @@ class Config(metaclass=_MetaConfig):
                 "Resolved session persistence and caching bugs. "
                 "Added data-sync API endpoints. "
                 "Strengthened network error handling. "
-                "Integrated Discord Rich Presence (Currently broken). "
             ),
         ),
         UpdateLogEntry(
