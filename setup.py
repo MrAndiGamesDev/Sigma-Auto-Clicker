@@ -21,7 +21,7 @@ class PyInstallerBuilder:
         self.script_file = script_file or (sys.argv[1] if len(sys.argv) > 1 else "autoclicker.py")
         self.app_name = "Sigma Auto Clicker"
         self.version_file = "VERSION.txt"
-        self.icon_path = "src/Assets/icons/mousepointer.ico"
+        self.icon_path = "src/icons/mousepointer.ico"
         
         # Validate critical paths
         self._validate_script_file()
@@ -36,7 +36,7 @@ class PyInstallerBuilder:
             f"--icon={self.icon_path}",
             "--optimize=2",
             "--clean",
-            f"--add-data={self.icon_path};src/Assets/icons/",
+            f"--add-data={self.icon_path};src/icons/",
             f"--add-data={self.version_file};.",
             "--hidden-import=PySide6",
             "--hidden-import=pyautogui",

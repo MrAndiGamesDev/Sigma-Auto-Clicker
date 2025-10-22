@@ -25,7 +25,6 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-src/Private/test.py
 pip-wheel-metadata/
 certificate.*
 sign.*
