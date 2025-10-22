@@ -20,7 +20,6 @@ try:
 except Exception:
     logger = _FallbackLogger.Log
 
-
 class PyInstallerBuilder:
     """Manages the build process for creating executables using PyInstaller."""
 
@@ -217,7 +216,33 @@ class PyInstallerBuilder:
             self.logger("error", f"Build process failed: {exc}")
             self._exit_script(cleanup_delay)
 
+class TempDirManager:
+    """Creates a temporary directory on script start and removes it on exit."""
+
+    def __init__(self, temp_dir_name: str = "sigma_temp"):
+        self.temp_dir = Path(temp_dir_name).resolve()
+        self.logger = logger
+
+    def create(self) -> None:
+        try:
+            self.temp_dir.mkdir(parents=True, exist_ok=True)
+            self.logger("info", f"Created temporary directory: {self.temp_dir}")
+        except Exception as exc:
+            self.logger("error", f"Failed to create temporary directory: {exc}")
+
+    def cleanup(self) -> None:
+        if self.temp_dir.exists():
+            try:
+                shutil.rmtree(self.temp_dir, ignore_errors=True)
+                self.logger("info", f"Removed temporary directory: {self.temp_dir}")
+            except Exception as exc:
+                self.logger("warning", f"Failed to remove temporary directory: {exc}")
 
 if __name__ == "__main__":
-    PyBuilder = PyInstallerBuilder()
-    PyBuilder.run()
+    temp_mgr = TempDirManager()
+    temp_mgr.create()
+    try:
+        PyBuilder = PyInstallerBuilder()
+        PyBuilder.run()
+    finally:
+        temp_mgr.cleanup()
