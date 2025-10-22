@@ -1532,14 +1532,14 @@ class DiscordRPC:
     load_dotenv()
     CLIENT_ID: Final[str] = os.getenv("DISCORD_CLIENT_ID") or ""
 
-    if not CLIENT_ID:
-        raise ValueError("DISCORD_CLIENT_ID not found in .env file")
-
     def __init__(self) -> None:
         self._rpc: Optional[Presence] = None
 
     def connect(self) -> bool:
         """Connect to Discord; return True on success."""
+        if not self.CLIENT_ID:
+            _LOGGING.warning("Discord RPC skipped: DISCORD_CLIENT_ID not set")
+            return False
         try:
             self._rpc = Presence(self.CLIENT_ID)
             self._rpc.connect()
