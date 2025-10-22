@@ -81,7 +81,7 @@ class PyInstallerBuilder:
             stdlib_names = {
                 "sys", "platform", "threading", "subprocess", "urllib", "webbrowser",
                 "socket", "os", "random", "re", "importlib", "typing", "pathlib",
-                "shutil", "time", "pkg_resources", "Presence"
+                "shutil", "time", "pkg_resources"
             }
 
             # 2. Walk through the project folder and collect every Python file

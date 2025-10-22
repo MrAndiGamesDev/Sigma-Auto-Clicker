@@ -9,5 +9,4 @@ requests
 psutil
 pynput
 autopep8
-pypresence
 dotenv
