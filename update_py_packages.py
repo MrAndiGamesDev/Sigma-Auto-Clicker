@@ -3,9 +3,11 @@ import sys
 from typing import List
 from time import sleep
 from src.Packages.CustomLogging import Logging
+import json
 
 class PackageUpdater:
     """Manages updating outdated Python packages using pip."""
+
     def __init__(self):
         """Initialize with custom logger."""
         self.logger = Logging.Log
@@ -18,14 +20,13 @@ class PackageUpdater:
         """Retrieve a list of outdated package names."""
         try:
             result = subprocess.run(
-                [sys.executable, "-m", "pip", "list", "--outdated"],
+                [sys.executable, "-m", "pip", "list", "--outdated", "--format=json"],
                 capture_output=True,
                 text=True,
                 check=True,
             )
-            outdated = result.stdout.strip().split("\n")
-            # Parse package names, ignoring empty lines or malformed output
-            packages = [line.split("==")[0] for line in outdated if line and "==" in line]
+            outdated = json.loads(result.stdout)
+            packages = [pkg["name"] for pkg in outdated]
             return packages
         except subprocess.CalledProcessError as e:
             self._log("error", f"Failed to list outdated packages: {e.stderr}")
@@ -42,7 +43,6 @@ class PackageUpdater:
 
         try:
             self._log("info", f"Updating {len(packages)} package(s): {', '.join(packages)}")
-            # Upgrade all packages in one command for efficiency
             result = subprocess.run(
                 [sys.executable, "-m", "pip", "install", "--upgrade"] + packages,
                 capture_output=True,
@@ -65,23 +65,23 @@ class PackageUpdater:
             return self._update_packages(packages)
         except RuntimeError:
             return False
-        
-    def exit_script(self, duration, lvl=1):
+
+    def exit_script(self, duration: int, lvl: int = 1) -> None:
         """Exit the script with a message."""
         self._log("info", "Exiting script.")
         sleep(duration)
         sys.exit(lvl)
 
-def run(duration: int = 2):
-    """Main entry point for the script."""
-    try:
-        updater = PackageUpdater()
-        success = updater.update()
-        if not success:
-            updater.exit_script(duration)
-    except Exception as e:
-        Logging.Log("error", f"Unexpected error in main: {e}")
-        updater.exit_script(duration)
+    def run(self, duration: int = 2) -> None:
+        """Main entry point for the script."""
+        try:
+            success = self.update()
+            if not success:
+                self.exit_script(duration)
+        except Exception as e:
+            Logging.Log("error", f"Unexpected error in main: {e}")
+            self.exit_script(duration)
 
 if __name__ == "__main__":
-    run()
+    PkgUpdater = PackageUpdater()
+    PkgUpdater.run()

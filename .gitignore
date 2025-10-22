@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+# Ingnores Vs Code
+.vscode/
+
 # Distribution / packaging
 .Python
 build/
@@ -13,6 +16,7 @@ develop-eggs/
 dist/
 downloads/
 Sigma-Auto-Clicker-Py/
+Releases/
 eggs/
 .eggs/
 lib/
@@ -25,10 +29,8 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-src/Private/test.py
 pip-wheel-metadata/
-certificate.*
-sign.*
+*.pfx
 *.exe
 MANIFEST
 
@@ -223,8 +225,6 @@ build/
 dist/
 *.spec
 *.manifest
-Sigma-Auto-Clicker.exe
-AutoClickerPy/
 
 # Virtual Environments
 .venv/
@@ -255,7 +255,6 @@ venv.bak/
 # Logs
 *.log
 logs/
-src/Packages/CustomLogging/*.log
 
 # Packaging and Distribution
 *.egg
@@ -265,8 +264,6 @@ pip-wheel-metadata/
 .installed.cfg
 MANIFEST
 certificate.*
-sign.*
-signtool.exe
 
 # Testing and Coverage
 .coverage
@@ -282,7 +279,6 @@ coverage.xml
 cover/
 
 # GUI and Image Artifacts
-*.ico
 *.png
 
 # IDE and Editor Files
@@ -351,7 +347,6 @@ pip-wheel-metadata/    # Pip wheel metadata
 .installed.cfg         # Installation config files
 MANIFEST               # MANIFEST file for packaging
 certificate.*          # Signing certificates for executables
-sign.*                 # Signing-related files
 signtool.exe           # Windows signing tool
 
 # Testing and Coverage

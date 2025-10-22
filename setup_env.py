@@ -11,9 +11,9 @@ logger = logging.getLogger()
 
 class VirtualEnvManager:
     """Manages creation and package installation for a virtual environment."""
-    def __init__(self, venv_path: str, requirements_file: str = "requirements.txt"):
+    def __init__(self, venv_path: Optional[str] = "Sigma-Auto-Clicker-Py", requirements_file: Optional[str] = "requirements.txt"):
         """Initialize with virtual environment path and optional requirements file."""
-        self.venv_path = Path(venv_path)
+        self.venv_path = Path(venv_path) if venv_path else Path("Sigma-Auto-Clicker-Py")
         self.requirements_file = Path(requirements_file)
         self.venv_python = self._get_venv_python()
 
@@ -91,15 +91,15 @@ class VirtualEnvManager:
         sleep(duration)
         sys.exit(lvl)
 
-def run(duration: Optional[int] = 2, env_name="Sigma-Auto-Clicker-Py"):
-    """Main entry point for the script."""
-    try:
-        venv_manager = VirtualEnvManager(env_name)
-        if not venv_manager.manage_venv():
-            venv_manager.exit_script(duration)
-    except Exception as e:
-        logger.error(f"Unexpected error in main: {e}")
-        venv_manager.exit_script(duration)
+    def run(self, duration: Optional[int] = 2):
+        """Main entry point for the script."""
+        try:
+            if not self.manage_venv():
+                self.exit_script(duration)
+        except Exception as e:
+            logger.error(f"Unexpected error in main: {e}")
+            self.exit_script(duration)
 
 if __name__ == "__main__":
-    run()  # Adjust duration as needed
+    venv_manager = VirtualEnvManager()
+    venv_manager.run()  # Adjust duration as needed
