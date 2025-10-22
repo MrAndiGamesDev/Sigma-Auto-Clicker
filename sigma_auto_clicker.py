@@ -1,3 +1,4 @@
+import logging as _logging
 import sys
 import time
 import platform
@@ -8,13 +9,17 @@ import requests
 import webbrowser
 import pyautogui
 import keyboard
+import json  # ← added missing import
 import socket
 import psutil
 import os
 import random
 import re
-import logging as _logging
-from pypresence import Presence
+import struct
+import uuid
+import time
+import ctypes
+from ctypes import wintypes
 from dotenv import load_dotenv
 from datetime import datetime
 from pathlib import Path
@@ -1527,49 +1532,113 @@ class InstanceDialog(QDialog):
             self.done(2)
 
 class DiscordRPC:
-    """Lightweight Discord Rich Presence wrapper."""
+    """Lightweight Discord Rich Presence wrapper using ctypes (Windows-only)."""
+
+    # Discord RPC constants
+    IPC_PIPE_PATTERN = r"\\?\pipe\discord-ipc-{}"
+    OPCODE_HANDSHAKE = 0
+    OPCODE_FRAME = 1
+    OPCODE_CLOSE = 2
+    OPCODE_PING = 3
+    OPCODE_PONG = 4
 
     load_dotenv()
     CLIENT_ID: Final[str] = os.getenv("DISCORD_CLIENT_ID") or ""
 
     def __init__(self) -> None:
-        self._rpc: Optional[Presence] = None
+        self._pipe: wintypes.HANDLE = wintypes.HANDLE(-1)
+
+    def _open_pipe(self, pipe_num: int = 0) -> wintypes.HANDLE:
+        pipe_name = self.IPC_PIPE_PATTERN.format(pipe_num)
+        INVALID_HANDLE_VALUE = -1  # Windows constant for an invalid handle
+        pipe = ctypes.windll.kernel32.CreateFileW(
+            pipe_name,
+            0x80000000 | 0x40000000,  # GENERIC_READ | GENERIC_WRITE
+            0,
+            None,
+            3,  # OPEN_EXISTING
+            0,
+            None
+        )
+        # Ensure we always return a wintypes.HANDLE, never a raw int
+        return wintypes.HANDLE(pipe) if pipe != INVALID_HANDLE_VALUE else wintypes.HANDLE(INVALID_HANDLE_VALUE)
+
+    def _write_pipe(self, data: bytes) -> bool:
+        if self._pipe.value == -1:
+            return False
+        written = wintypes.DWORD(0)
+        return ctypes.windll.kernel32.WriteFile(
+            self._pipe, data, len(data), ctypes.byref(written), None
+        ) != 0
+
+    def _read_pipe(self, size: int) -> bytes:
+        if self._pipe.value == -1:
+            return b""
+        buffer = ctypes.create_string_buffer(size)
+        bytes_read = wintypes.DWORD(0)
+        ctypes.windll.kernel32.ReadFile(
+            self._pipe, buffer, size, ctypes.byref(bytes_read), None
+        )
+        return buffer.raw[:bytes_read.value]
+
+    def _send_handshake(self) -> bool:
+        nonce = str(uuid.uuid4())
+        handshake = {
+            "v": 1,
+            "client_id": self.CLIENT_ID
+        }
+        payload = self._encode_payload(self.OPCODE_HANDSHAKE, handshake, nonce)
+        return self._write_pipe(payload)
+
+    def _encode_payload(self, opcode: int, data: dict, nonce: str = "") -> bytes:
+        body = json.dumps(data).encode("utf-8")
+        header = struct.pack("<II", opcode, len(body))
+        return header + body
 
     def connect(self) -> bool:
-        """Connect to Discord; return True on success."""
+        """Connect to Discord via named pipe; return True on success."""
         if not self.CLIENT_ID:
             _LOGGING.warning("Discord RPC skipped: DISCORD_CLIENT_ID not set")
             return False
-        try:
-            self._rpc = Presence(self.CLIENT_ID)
-            self._rpc.connect()
-            return True
-        except Exception as e:
-            _LOGGING.warning("Discord RPC connect failed: %s", e)
-            return False
+        for i in range(10):
+            self._pipe = self._open_pipe(i)
+            if self._pipe.value != -1:
+                if self._send_handshake():
+                    _LOGGING.info("Discord RPC connected on pipe %d", i)
+                    return True
+                else:
+                    ctypes.windll.kernel32.CloseHandle(self._pipe)
+        _LOGGING.warning("Discord RPC connect failed: no pipe available")
+        return False
 
     def update_presence(self) -> None:
         """Push the current presence payload to Discord."""
-        if not self._rpc:
+        if self._pipe.value == -1:
             return
-        
-        try:
-            version = FileManager.read_file(Config.VERSION_FILE, Config.DEFAULT_VERSION) or Config.DEFAULT_VERSION
-            self._rpc.update(
-                state="Clicking away!",
-                details=f"{Config.APP_NAME} (v{version})",
-            )
-        except Exception as e:
-            _LOGGING.warning("Discord RPC update failed: %s", e)
+        version = FileManager.read_file(Config.VERSION_FILE, Config.DEFAULT_VERSION) or Config.DEFAULT_VERSION
+        activity = {
+            "state": "Clicking away!",
+            "details": f"{Config.APP_NAME} (v{version})",
+            "timestamps": {"start": int(time.time())},
+        }
+        payload = self._encode_payload(self.OPCODE_FRAME, {
+            "cmd": "SET_ACTIVITY",
+            "args": {"pid": os.getpid(), "activity": activity},
+            "nonce": str(uuid.uuid4())
+        })
+        if not self._write_pipe(payload):
+            _LOGGING.warning("Discord RPC update failed: write error")
 
     def close(self) -> None:
         """Disconnect and clean up."""
-        if self._rpc:
+        if self._pipe.value != -1:
             try:
-                self._rpc.close()
+                close_payload = self._encode_payload(self.OPCODE_CLOSE, {})
+                self._write_pipe(close_payload)
+                ctypes.windll.kernel32.CloseHandle(self._pipe)
             except Exception:
                 pass
-            self._rpc = None
+            self._pipe = wintypes.HANDLE(-1)
 
 class ApplicationLauncher:
     """Handles application startup with singleton enforcement."""
