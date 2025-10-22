@@ -917,7 +917,7 @@ class UpdateChecker(QThread):
         """Check for updates and emit signals."""
         if not self._running:
             return
-        self._logger.log("Starting update check...")
+        self._logger.log("🔃 Starting update check...")
         release_info = VersionManager.fetch_latest_release(self._timeout)
         latest_version = release_info.get('version', self._current_version)
         self.version_fetched.emit(latest_version)
