@@ -5,3 +5,8 @@
 - [ ] Bug fix
 - [ ] Security patch
 - [ ] UI/UX improvement
+
+## Type of Change
+- [] Big Update
+- [] Bug Fixes Update
+- [] Small Update
