@@ -1,4 +1,3 @@
-from optparse import Option
 import sys
 import time
 import platform
@@ -130,6 +129,18 @@ class Config(metaclass=_MetaConfig):
 
     # --- Update history --------------------------------------------------------
     UPDATE_LOGS: Final[List[UpdateLogEntry]] = [
+        UpdateLogEntry(
+            date="2025-10-22",
+            version="1.1.2",
+            description=(
+                "Enhanced admin mode toggle with improved functionality. "
+                "Reduced resource usage via performance optimizations. "
+                "Resolved session persistence and caching bugs. "
+                "Added data-sync API endpoints. "
+                "Strengthened network error handling. "
+                "Integrated Discord Rich Presence."
+            ),
+        ),
         UpdateLogEntry(
             date="2025-10-19",
             version="1.1.0",
