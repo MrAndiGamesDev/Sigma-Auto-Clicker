@@ -65,8 +65,23 @@ class PyInstallerBuilder:
             "--hidden-import=keyboard",
             "--hidden-import=psutil",
             "--hidden-import=requests",
+            "--hidden-import=sys",
+            "--hidden-import=platform",
+            "--hidden-import=threading",
+            "--hidden-import=subprocess",
+            "--hidden-import=urllib.request",
+            "--hidden-import=webbrowser",
+            "--hidden-import=socket",
+            "--hidden-import=os",
+            "--hidden-import=random",
+            "--hidden-import=re",
+            "--hidden-import=requests",
+            "--hidden-import=requests",
+            "--hidden-import=requests",
+            "--hidden-import=requests",
+            "--hidden-import=requests",
         ]
-
+        
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
