@@ -7,6 +7,5 @@
 - [ ] UI/UX improvement
 
 ## Type of Change
-- [] Big Update
-- [] Bug Fixes Update
-- [] Small Update
+- [ ] Big Update
+- [ ] Small Update
