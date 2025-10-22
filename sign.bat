@@ -17,19 +17,16 @@ REM Load password from .env
 REM ================================
 IF NOT EXIST "%ENV_FILE%" (
     ECHO ERROR: %ENV_FILE% file not found!
-    GOTO :ERROR
+    PAUSE & EXIT /B 1
 )
 
-SET "CERT_PASSWORD="
 FOR /F "tokens=1,2 delims== " %%A IN (%ENV_FILE%) DO (
-    IF /I "%%A"=="%PASSWORD_KEY%" (
-        SET "CERT_PASSWORD=%%B"
-    )
+    IF /I "%%A"=="%PASSWORD_KEY%" SET "CERT_PASSWORD=%%B"
 )
 
 IF NOT DEFINED CERT_PASSWORD (
     ECHO ERROR: %PASSWORD_KEY% not found in %ENV_FILE%!
-    GOTO :ERROR
+    PAUSE & EXIT /B 1
 )
 
 REM ================================
@@ -37,29 +34,10 @@ REM Sign the file
 REM ================================
 ECHO Signing "%FILE_TO_SIGN%"...
 signtool.exe sign /f "%CERT_FILE%" /p "%CERT_PASSWORD%" /tr "%TIMESTAMP_SERVER%" /td %SIGN_ALGORITHM% /fd %SIGN_ALGORITHM% "%FILE_TO_SIGN%"
-IF %ERRORLEVEL% NEQ 0 GOTO :SIGNING_FAILED
+IF %ERRORLEVEL% NEQ 0 (
+    ECHO ERROR: Signing failed with error code %ERRORLEVEL%.
+    PAUSE & EXIT /B 1
+)
 
-REM ================================
-REM Success
-REM ================================
 ECHO Signing completed successfully.
-GOTO :END
-
-REM ================================
-REM Error handling
-REM ================================
-:SIGNING_FAILED
-ECHO ERROR: Signing failed with error code %ERRORLEVEL%.
-GOTO :ERROR
-
-:ERROR
-ECHO.
-ECHO Script execution failed.
-PAUSE
-EXIT /B 1
-
-:END
-ECHO.
-ECHO Script completed.
-PAUSE
-EXIT /B 0
+PAUSE & EXIT /B 0
