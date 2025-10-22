@@ -13,7 +13,6 @@ function Test-CertFile {
         $true
     } else { $false }
 }
-
 function Get-ExistingCert {
     param([string]$Subject)
     Get-ChildItem Cert:\CurrentUser\My |
@@ -49,6 +48,19 @@ function Write-CertInfo {
     Write-Host "Thumbprint: $($Cert.Thumbprint)" -ForegroundColor Cyan
     Write-Host "Valid until: $($Cert.NotAfter)" -ForegroundColor Cyan
 }
+
+function Get-PfxPassword {
+    $password = Get-EnvVar 'PFX_PASSWORD'
+    if (-not $password) {
+        $password = Read-Host "PFX_PASSWORD not found in .env – please enter it now" -AsSecureString
+        if (-not $password) {
+            Write-Host "No password supplied; aborting." -ForegroundColor Red
+            exit 1
+        }
+        return $password
+    }
+    ConvertTo-SecureString $password -AsPlainText -Force
+}
 #endregion
 
 #region Configuration
@@ -62,12 +74,7 @@ $Executable = "dist\Sigma Auto Clicker (v$Version).exe"
 if (Test-CertFile $CertPath) { exit }
 
 # Load password once
-$PfxPassword = Get-EnvVar 'PFX_PASSWORD'
-if (-not $PfxPassword) {
-    Write-Host "PFX_PASSWORD not found in .env" -ForegroundColor Red
-    exit 1
-}
-$SecurePassword = ConvertTo-SecureString $PfxPassword -AsPlainText -Force
+$SecurePassword = Get-PfxPassword
 
 # Check store for existing cert
 $ExistingCert = Get-ExistingCert $AuthorName
