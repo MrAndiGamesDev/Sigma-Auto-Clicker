@@ -26,8 +26,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 pip-wheel-metadata/
-certificate.*
-sign.*
+*.pfx
 *.exe
 MANIFEST
 
@@ -261,8 +260,6 @@ pip-wheel-metadata/
 .installed.cfg
 MANIFEST
 certificate.*
-sign.*
-signtool.exe
 
 # Testing and Coverage
 .coverage
@@ -346,7 +343,6 @@ pip-wheel-metadata/    # Pip wheel metadata
 .installed.cfg         # Installation config files
 MANIFEST               # MANIFEST file for packaging
 certificate.*          # Signing certificates for executables
-sign.*                 # Signing-related files
 signtool.exe           # Windows signing tool
 
 # Testing and Coverage
