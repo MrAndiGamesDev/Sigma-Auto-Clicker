@@ -1,3 +1,4 @@
+from optparse import Option
 import sys
 import time
 import platform
@@ -14,6 +15,8 @@ import os
 import random
 import re
 import logging as _logging
+from pypresence import Presence
+from dotenv import load_dotenv
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
@@ -26,7 +29,6 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QIcon, QAction
 from PySide6.QtCore import Qt, QTimer, QThread, Signal as pyqtSignal, QObject
 from requests.exceptions import RequestException, HTTPError, ConnectionError, Timeout
-from src.Packages.CustomLogging import Logging
 
 _LOGGING: Final = _logging.getLogger(__name__)
 
@@ -1513,48 +1515,91 @@ class InstanceDialog(QDialog):
         if choice == QMessageBox.Yes:
             self.done(2)
 
+class DiscordRPC:
+    """Lightweight Discord Rich Presence wrapper."""
+
+    load_dotenv()
+    CLIENT_ID: Final[str] = os.getenv("DISCORD_CLIENT_ID") or ""
+
+    if not CLIENT_ID:
+        raise ValueError("DISCORD_CLIENT_ID not found in .env file")
+
+    def __init__(self) -> None:
+        self._rpc: Optional[Presence] = None
+
+    def connect(self) -> bool:
+        """Connect to Discord; return True on success."""
+        try:
+            self._rpc = Presence(self.CLIENT_ID)
+            self._rpc.connect()
+            return True
+        except Exception as e:
+            _LOGGING.warning("Discord RPC connect failed: %s", e)
+            return False
+
+    def update_presence(self) -> None:
+        """Push the current presence payload to Discord."""
+        if not self._rpc:
+            return
+        
+        try:
+            version = FileManager.read_file(Config.VERSION_FILE, Config.DEFAULT_VERSION) or Config.DEFAULT_VERSION
+            self._rpc.update(
+                state="Clicking away!",
+                details=f"{Config.APP_NAME} (v{version})",
+            )
+        except Exception as e:
+            _LOGGING.warning("Discord RPC update failed: %s", e)
+
+    def close(self) -> None:
+        """Disconnect and clean up."""
+        if self._rpc:
+            try:
+                self._rpc.close()
+            except Exception:
+                pass
+            self._rpc = None
+
 class ApplicationLauncher:
     """Handles application startup with singleton enforcement."""
 
-    @staticmethod
-    def _ensure_directories_and_log() -> Logger:
+    def __init__(self) -> None:
+        self.logger = self._ensure_directories_and_log()
+
+    def _ensure_directories_and_log(self) -> Logger:
         FileManager.ensure_app_directory()
         return Logger(None)
 
-    @staticmethod
-    def _check_os_compatibility(logger: Logger) -> bool:
-        compat = OSCompatibilityChecker.check_compatibility(logger)
-        OSCompatibilityChecker.show_compatibility_dialog(compat, logger)
+    def _check_os_compatibility(self) -> bool:
+        compat = OSCompatibilityChecker.check_compatibility(self.logger)
+        OSCompatibilityChecker.show_compatibility_dialog(compat, self.logger)
         return compat["compatible"]
 
-    @staticmethod
-    def _build_qapp() -> QApplication:
+    def _build_qapp(self) -> QApplication:
         app = QApplication(sys.argv)
         app.setQuitOnLastWindowClosed(False)
         app.setApplicationName(Config.APP_NAME)
         app.setOrganizationName(Config.AUTHORNAME)
         return app
 
-    @staticmethod
-    def _set_app_icon(app: QApplication, logger: Logger) -> None:
+    def _set_app_icon(self, app: QApplication) -> None:
         try:
             icon_path = FileManager.download_icon()
             app.setWindowIcon(QIcon(icon_path))
         except Exception as e:
-            logger.log(f"Failed to set app icon: {e}")
+            self.logger.log(f"Failed to set app icon: {e}")
 
-    @staticmethod
-    def _handle_singleton_lock(lock: "SingletonLock", logger: Logger) -> bool:
+    def _handle_singleton_lock(self, lock: "SingletonLock") -> bool:
         acquired = lock.acquire_lock()
         if acquired is not None:
             return True
 
-        dialog = InstanceDialog(lock.lockfile_path, logger)
+        dialog = InstanceDialog(lock.lockfile_path, self.logger)
         result = dialog.exec()
 
         if result == QDialog.Accepted:
             if lock.activate_existing():
-                logger.log("Activated existing instance")
+                self.logger.log("Activated existing instance")
                 sys.exit(0)
             QMessageBox.critical(None, "❌ Error", "Could not activate existing instance.")
             sys.exit(1)
@@ -1566,30 +1611,40 @@ class ApplicationLauncher:
             if lock.acquire_lock() is None:
                 QMessageBox.critical(None, "❌ Error", "Could not create new instance.")
                 sys.exit(1)
-            logger.log("Forced new instance created")
+            self.logger.log("Forced new instance created")
             return True
 
         sys.exit(0)
 
-    @staticmethod
-    def run() -> None:
-        logger = ApplicationLauncher._ensure_directories_and_log()
-        if not ApplicationLauncher._check_os_compatibility(logger):
+    def _start_rpc(self) -> None:
+        try:
+            discord_rpc = DiscordRPC()
+            if not discord_rpc.connect():
+                sys.exit(1)
+            discord_rpc.update_presence()
+            self.logger.log("Discord Rich Presence started.")
+        except Exception as e:
+            self.logger.log(f"RPC error: {e}")
             sys.exit(1)
 
-        app = ApplicationLauncher._build_qapp()
-        ApplicationLauncher._set_app_icon(app, logger)
+    def run(self) -> None:
+        if not self._check_os_compatibility():
+            sys.exit(1)
 
-        lock = SingletonLock(logger=logger)
-        if not ApplicationLauncher._handle_singleton_lock(lock, logger):
+        app = self._build_qapp()
+        self._set_app_icon(app)
+
+        lock = SingletonLock(logger=self.logger)
+        if not self._handle_singleton_lock(lock):
             sys.exit(1)
 
         try:
             window = AutoClickerApp(lock)
+            self._start_rpc()
             window.show()
             sys.exit(app.exec())
         except Exception as e:
-            logger.log(f"Application error: {e}")
+            self.logger.log(f"Application error: {e}")
             sys.exit(1)
         finally:
             lock.release_lock()
