@@ -8,19 +8,17 @@
 ## 📝 Description
 Sigma Auto Clicker allows users to automate mouse clicks efficiently with customizable speed, and more. Ideal for gaming, testing, or productivity tasks.  
 
-## 💻 Programming Language / Framework
-- **Language:** Python  
-- **GUI Framework:** PySide6 (switched from CustomTkinter)  
-- **Dependencies:**
-```bash
-   keyboard, mouse, Pillow, pyautogui, PySide6, PyInstaller, colorama, requests, psutil, pynput, autopep8, pypresence, dotenv, src/Packages/CustomLogging (custom made)  
-
 ## ✨ Features
 - Adjustable click speed  
 - Hotkey support for start/stop  
 - System tray integration  
 - Multi-platform compatibility (Windows)  
-- Lightweight and easy-to-use interface  
+- Lightweight and easy-to-use interface 
+
+## 💻 Programming Language / Framework
+- **Language:** Python  
+- **GUI Framework:** PySide6 (switched from CustomTkinter)  
+- **Dependencies:** keyboard, mouse, Pillow, pyautogui, PySide6, PyInstaller, colorama, requests, psutil, pynput, autopep8, pypresence, dotenv, src/Packages/CustomLogging (custom made)   
 
 ## ⚙️ Installation
 1. Clone this repository:
