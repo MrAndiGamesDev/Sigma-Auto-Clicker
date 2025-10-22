@@ -75,11 +75,6 @@ class PyInstallerBuilder:
             "--hidden-import=os",
             "--hidden-import=random",
             "--hidden-import=re",
-            "--hidden-import=requests",
-            "--hidden-import=requests",
-            "--hidden-import=requests",
-            "--hidden-import=requests",
-            "--hidden-import=requests",
         ]
         
     # ------------------------------------------------------------------
