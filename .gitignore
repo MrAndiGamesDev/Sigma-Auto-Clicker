@@ -16,6 +16,7 @@ develop-eggs/
 dist/
 downloads/
 Sigma-Auto-Clicker-Py/
+sigma_temp/
 Releases/
 eggs/
 .eggs/

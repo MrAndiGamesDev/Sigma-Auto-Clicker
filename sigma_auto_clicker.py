@@ -1719,8 +1719,8 @@ class ApplicationLauncher:
             sys.exit(1)
 
         try:
-            window = AutoClickerApp(lock)
             self._start_rpc()
+            window = AutoClickerApp(lock)
             window.show()
             sys.exit(app.exec())
         except Exception as e:
