@@ -8,9 +8,12 @@ SET "CERT_FILE=certificate.pfx"
 SET "TIMESTAMP_SERVER=http://timestamp.digicert.com"
 SET "SIGN_ALGORITHM=sha256"
 SET /P VERSION=<VERSION.txt
-SET "FILE_TO_SIGN=.\dist\Sigma Auto Clicker (v%VERSION%).exe"
+SET "FILE_TO_SIGN=dist\Sigma Auto Clicker (v%VERSION%).exe"
 SET "ENV_FILE=.env"
 SET "PASSWORD_KEY=PFX_PASSWORD"
+SET "ARCHIVES=Downloads\Archives"
+SET "BIN=%ARCHIVES%\Windows Kits\10\bin\10.0.26100.0\x64"
+SET "SIGN_TOOL=%ARCHIVES%%BIN%\signtool.exe"
 
 REM ================================
 REM Load password from .env
@@ -33,7 +36,7 @@ REM ================================
 REM Sign the file
 REM ================================
 ECHO Signing "%FILE_TO_SIGN%"...
-signtool.exe sign /f "%CERT_FILE%" /p "%CERT_PASSWORD%" /tr "%TIMESTAMP_SERVER%" /td %SIGN_ALGORITHM% /fd %SIGN_ALGORITHM% "%FILE_TO_SIGN%"
+%SIGN_TOOL%.exe sign /f "%CERT_FILE%" /p "%CERT_PASSWORD%" /tr "%TIMESTAMP_SERVER%" /td %SIGN_ALGORITHM% /fd %SIGN_ALGORITHM% "%FILE_TO_SIGN%"
 IF %ERRORLEVEL% NEQ 0 (
     ECHO ERROR: Signing failed with error code %ERRORLEVEL%.
     PAUSE & EXIT /B 1
