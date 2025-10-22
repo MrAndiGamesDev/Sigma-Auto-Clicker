@@ -1,24 +1,10 @@
 import os
 import shutil
 import sys
-import subprocess
-import pkg_resources
+import PyInstaller.__main__
 from time import sleep
 from typing import Optional, List
-from pathlib import Path
-from importlib.metadata import distributions
-
-# Fallback logger if CustomLogging import fails
-class _FallbackLogger:
-    @staticmethod
-    def Log(level: str, message: str) -> None:
-        print(f"[{level.upper()}] {message}")
-
-try:
-    from src.Packages.CustomLogging import Logging
-    logger = Logging.Log
-except Exception:
-    logger = _FallbackLogger.Log
+from src.Packages.CustomLogging import Logging # Replace this into a different module
 
 class PyInstallerBuilder:
     """Manages the build process for creating executables using PyInstaller."""
@@ -29,9 +15,9 @@ class PyInstallerBuilder:
 
         Args:
             script_file (Optional[str]): Path to the main script file to build.
-                Defaults to sys.argv[1] or 'sigma_auto_clicker.py'.
+                Defaults to sys.argv[1] or 'autoclicker.py'.
         """
-        self.logger = logger
+        self.logger = Logging.Log
         self.script_file = script_file or (sys.argv[1] if len(sys.argv) > 1 else "sigma_auto_clicker.py")
         self.app_name = "Sigma Auto Clicker"
         self.version_file = "VERSION.txt"
@@ -63,60 +49,50 @@ class PyInstallerBuilder:
         return f"{self.app_name} (v{version})" if version else self.app_name
 
     def _build_pyinstaller_args(self) -> List[str]:
-        def _collect_required_imports() -> List[str]:
-            """
-            Discover all top-level packages/modules that are *not* installed
-            in the current environment and therefore must be explicitly
-            hidden-imported so PyInstaller bundles them.
-            """
-            # 1. Build a set of everything that is importable from site-packages
-            try:
-                installed_dists = {d.metadata["Name"].lower() for d in distributions()}
-            except ImportError:
-                # fallback for Python < 3.8
-                installed_dists = {d.project_name.lower() for d in pkg_resources.working_set}
-
-            # Also add standard-library modules (they are always available)
-            stdlib_names = {
-                "sys", "platform", "threading", "subprocess", "urllib", "webbrowser",
-                "socket", "os", "random", "re", "importlib", "typing", "pathlib",
-                "shutil", "time", "pkg_resources"
-            }
-
-            # 2. Walk through the project folder and collect every Python file
-            project_root = Path(__file__).resolve().parent
-            local_modules = set()
-            for py_file in project_root.rglob("*.py"):
-                if py_file.name.startswith("__"):
-                    continue
-                relative = py_file.relative_to(project_root).with_suffix("")
-                dotted = str(relative).replace(os.sep, ".")
-                local_modules.add(dotted.split(".")[0])  # top-level only
-
-            # 3. Filter out what is already satisfied (installed or stdlib)
-            required = [
-                mod for mod in local_modules
-                if mod.lower() not in installed_dists and mod not in stdlib_names
-            ]
-            return required
-
-        hidden_imports = [f"--hidden-import={m}" for m in _collect_required_imports()]
-
         return [
             self.script_file,
             "--noconfirm",
             "--onefile",
-            "--noconsole",
-            "--clean",
+            "--windowed",
             f"--name={self._get_executable_name()}",
             f"--icon={self.icon_path}",
             "--optimize=2",
+            "--clean",
             f"--add-data={self.icon_path};src/icons/",
             f"--add-data={self.version_file};.",
-            "--additional-hooks-dir=hooks",
-            *hidden_imports
+            "--hidden-import=logging",
+            "--hidden-import=sys",
+            "--hidden-import=time",
+            "--hidden-import=platform",
+            "--hidden-import=threading",
+            "--hidden-import=subprocess",
+            "--hidden-import=urllib.request",
+            "--hidden-import=requests",
+            "--hidden-import=webbrowser",
+            "--hidden-import=pyautogui",
+            "--hidden-import=keyboard",
+            "--hidden-import=json",
+            "--hidden-import=socket",
+            "--hidden-import=psutil",
+            "--hidden-import=os",
+            "--hidden-import=random",
+            "--hidden-import=re",
+            "--hidden-import=struct",
+            "--hidden-import=uuid",
+            "--hidden-import=ctypes",
+            "--hidden-import=ctypes.wintypes",
+            "--hidden-import=dotenv",
+            "--hidden-import=datetime",
+            "--hidden-import=pathlib",
+            "--hidden-import=dataclasses",
+            "--hidden-import=typing",
+            "--hidden-import=PySide6.QtWidgets",
+            "--hidden-import=PySide6.QtGui",
+            "--hidden-import=PySide6.QtCore",
+            "--hidden-import=requests.exceptions",
+            "--collect-submodules=src",
+            "--log-level=WARN",
         ]
-
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
@@ -183,12 +159,7 @@ class PyInstallerBuilder:
             self.logger(
                 "info", "Running PyInstaller with arguments: " + " ".join(self.pyinstaller_args)
             )
-            # Use subprocess to ensure the build runs in a fresh interpreter
-            cmd = [sys.executable, "-m", "PyInstaller"] + self.pyinstaller_args
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                self.logger("error", f"PyInstaller build failed:\n{result.stderr}")
-                self._exit_script(2)
+            PyInstaller.__main__.run(self.pyinstaller_args)
             self.logger(
                 "success",
                 f"Executable '{self._get_executable_name()}' built successfully in 'dist' folder.",
@@ -216,33 +187,6 @@ class PyInstallerBuilder:
             self.logger("error", f"Build process failed: {exc}")
             self._exit_script(cleanup_delay)
 
-class TempDirManager:
-    """Creates a temporary directory on script start and removes it on exit."""
-
-    def __init__(self, temp_dir_name: str = "sigma_temp"):
-        self.temp_dir = Path(temp_dir_name).resolve()
-        self.logger = logger
-
-    def create(self) -> None:
-        try:
-            self.temp_dir.mkdir(parents=True, exist_ok=True)
-            self.logger("info", f"Created temporary directory: {self.temp_dir}")
-        except Exception as exc:
-            self.logger("error", f"Failed to create temporary directory: {exc}")
-
-    def cleanup(self) -> None:
-        if self.temp_dir.exists():
-            try:
-                shutil.rmtree(self.temp_dir, ignore_errors=True)
-                self.logger("info", f"Removed temporary directory: {self.temp_dir}")
-            except Exception as exc:
-                self.logger("warning", f"Failed to remove temporary directory: {exc}")
-
 if __name__ == "__main__":
-    temp_mgr = TempDirManager()
-    temp_mgr.create()
-    try:
-        PyBuilder = PyInstallerBuilder()
-        PyBuilder.run()
-    finally:
-        temp_mgr.cleanup()
+    PyBuilder = PyInstallerBuilder()
+    PyBuilder.run()
