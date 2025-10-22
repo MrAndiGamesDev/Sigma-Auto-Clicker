@@ -1,56 +1,104 @@
-# Check if certificate.pfx already exists
-$certPath = "certificate.pfx"
-if (Test-Path $certPath) {
-    Write-Host "Certificate file '$certPath' already exists. Skipping creation." -ForegroundColor Yellow
-    Write-Host "Delete the file if you want to create a new certificate." -ForegroundColor Yellow
-    exit
+#region Helper functions
+function Get-EnvVar {
+    param([string]$Key)
+    (Get-Content .env -ErrorAction SilentlyContinue) -match "^$Key=" |
+        ForEach-Object { ($_ -split '=', 2)[1] }
 }
 
-get-content .env | foreach {
-    $name, $value = $_.split('=')
+function Test-CertFile {
+    param([string]$Path)
+    if (Test-Path $Path) {
+        Write-Host "Certificate file '$Path' already exists. Skipping creation." -ForegroundColor Yellow
+        Write-Host "Delete the file if you want to create a new certificate." -ForegroundColor Yellow
+        $true
+    } else { $false }
 }
 
-# Check if certificate already exists in store
-$Authername = "MrAndi Scripted LLC!"
-$existingCert = Get-ChildItem -Path Cert:\CurrentUser\My | Where-Object { $_.Subject -eq "CN=$Authername" }
+function Get-ExistingCert {
+    param([string]$Subject)
+    Get-ChildItem Cert:\CurrentUser\My |
+        Where-Object { $_.Subject -eq "CN=$Subject" }
+}
 
-$version = Get-Content -Path "VERSION.txt"
-$target = "Sigma Auto Clicker (v$version)"
-$executetype = "$target.exe"
+function Remove-ExpiredCert {
+    param($Cert)
+    Write-Host "Certificate has expired. Removing and creating new one..." -ForegroundColor Red
+    $Cert | Remove-Item
+}
 
-if ($existingCert) {
-    Write-Host "Certificate for '$Authername' already exists in certificate store." -ForegroundColor Yellow
-    Write-Host "Thumbprint: $($existingCert.Thumbprint)" -ForegroundColor Cyan
-    Write-Host "NotAfter: $($existingCert.NotAfter)" -ForegroundColor Cyan
-    $daysLeft = ($existingCert.NotAfter - (Get-Date)).Days
-    Write-Host "Days remaining: $daysLeft" -ForegroundColor Cyan
-    if ($daysLeft -gt 0) {
+function New-CodeSigningCert {
+    param([string]$Subject)
+    $params = @{
+        Type              = 'CodeSigningCert'
+        Subject           = "CN=$Subject"
+        CertStoreLocation = 'Cert:\CurrentUser\My'
+        KeyExportPolicy   = 'Exportable'
+        NotAfter          = (Get-Date).AddYears(1)
+    }
+    New-SelfSignedCertificate @params
+}
+
+function Export-CertToPfx {
+    param($Cert, [string]$Path, [securestring]$Password)
+    Export-PfxCertificate -Cert $Cert -FilePath $Path -Password $Password
+}
+
+function Write-CertInfo {
+    param($Cert, [string]$Action)
+    Write-Host "Certificate $Action successfully!" -ForegroundColor Green
+    Write-Host "Thumbprint: $($Cert.Thumbprint)" -ForegroundColor Cyan
+    Write-Host "Valid until: $($Cert.NotAfter)" -ForegroundColor Cyan
+}
+#endregion
+
+#region Configuration
+$CertPath   = "certificate.pfx"
+$AuthorName = "MrAndi Scripted LLC"
+$Version    = Get-Content VERSION.txt
+$Executable = "dist\Sigma Auto Clicker (v$Version).exe"
+#endregion
+
+# Early exit if PFX already present
+if (Test-CertFile $CertPath) { exit }
+
+# Load password once
+$PfxPassword = Get-EnvVar 'PFX_PASSWORD'
+if (-not $PfxPassword) {
+    Write-Host "PFX_PASSWORD not found in .env" -ForegroundColor Red
+    exit 1
+}
+$SecurePassword = ConvertTo-SecureString $PfxPassword -AsPlainText -Force
+
+# Check store for existing cert
+$ExistingCert = Get-ExistingCert $AuthorName
+if ($ExistingCert) {
+    Write-Host "Certificate for '$AuthorName' already exists in certificate store." -ForegroundColor Yellow
+    Write-Host "Thumbprint: $($ExistingCert.Thumbprint)" -ForegroundColor Cyan
+    Write-Host "NotAfter: $($ExistingCert.NotAfter)" -ForegroundColor Cyan
+
+    $DaysLeft = ($ExistingCert.NotAfter - (Get-Date)).Days
+    Write-Host "Days remaining: $DaysLeft" -ForegroundColor Cyan
+
+    if ($DaysLeft -gt 0) {
         Write-Host "Certificate is still valid. Skipping creation." -ForegroundColor Yellow
         exit
-    } else {
-        Write-Host "Certificate has expired. Removing and creating new one..." -ForegroundColor Red
-        $existingCert | Remove-Item
     }
+    Remove-ExpiredCert $ExistingCert
 }
 
-# Create a self-signed certificate valid for 1 year
+# Create and export new certificate
 Write-Host "Creating new code signing certificate..." -ForegroundColor Green
 try {
-    $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=$Authername" -CertStoreLocation Cert:\CurrentUser\My -KeyExportPolicy Exportable -NotAfter (Get-Date).AddYears(1)
-    Write-Host "Certificate created successfully!" -ForegroundColor Green
-    Write-Host "Thumbprint: $($cert.Thumbprint)" -ForegroundColor Cyan
-    Write-Host "Valid until: $($cert.NotAfter)" -ForegroundColor Cyan
-    
-    # Export to PFX
-    $pswrd = ConvertTo-SecureString -String $value -Force -AsPlainText
-    Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $pswrd
-    
-    Write-Host "Certificate exported to '$certPath'" -ForegroundColor Green
-    
+    $Cert = New-CodeSigningCert $AuthorName
+    Write-CertInfo $Cert 'created'
+
+    Export-CertToPfx -Cert $Cert -Path $CertPath -Password $SecurePassword
+    Write-Host "Certificate exported to '$CertPath'" -ForegroundColor Green
+
     # Verify export
-    if (Test-Path $certPath) {
-        $pfxSize = (Get-Item $certPath).Length
-        Write-Host "Export verified. File size: ${pfxSize} bytes" -ForegroundColor Green
+    if (Test-Path $CertPath) {
+        $Size = (Get-Item $CertPath).Length
+        Write-Host "Export verified. File size: $Size bytes" -ForegroundColor Green
     }
 } catch {
     Write-Host "Error creating certificate: $($_.Exception.Message)" -ForegroundColor Red
@@ -59,4 +107,63 @@ try {
 
 Write-Host "`nCertificate creation completed successfully!" -ForegroundColor Green
 Write-Host "To use this certificate for signing:" -ForegroundColor Cyan
-Write-Host "Set-AuthenticodeSignature -FilePath '$executetype' -Certificate (Get-ChildItem Cert:\CurrentUser\My\$($cert.Thumbprint))" -ForegroundColor White
+Write-Host "Set-AuthenticodeSignature -FilePath '$Executable' -Certificate (Get-ChildItem Cert:\CurrentUser\My\$($Cert.Thumbprint))" -ForegroundColor White
+
+# Invoke embedded batch signing script
+$Batch = @'
+@ECHO OFF
+SETLOCAL EnableDelayedExpansion
+
+REM ==== Configuration ====
+SET "CERT_FILE=certificate.pfx"
+SET "TIMESTAMP_SERVER=http://timestamp.digicert.com"
+SET "SIGN_ALGORITHM=sha256"
+SET /P VERSION=<VERSION.txt
+SET "FILE_TO_SIGN=dist\Sigma Auto Clicker (v%VERSION%).exe"
+SET "ENV_FILE=.env"
+SET "PASSWORD_KEY=PFX_PASSWORD"
+
+REM ==== Load password ====
+IF NOT EXIST "%ENV_FILE%" (
+    ECHO ERROR: %ENV_FILE% file not found!
+    GOTO :ERROR
+)
+
+SET "CERT_PASSWORD="
+FOR /F "tokens=1,2 delims== " %%A IN (%ENV_FILE%) DO (
+    IF /I "%%A"=="%PASSWORD_KEY%" SET "CERT_PASSWORD=%%B"
+)
+
+IF NOT DEFINED CERT_PASSWORD (
+    ECHO ERROR: %PASSWORD_KEY% not found in %ENV_FILE%!
+    GOTO :ERROR
+)
+
+REM ==== Sign file ====
+ECHO Signing "%FILE_TO_SIGN%"...
+signtool.exe sign /f "%CERT_FILE%" /p "%CERT_PASSWORD%" /tr "%TIMESTAMP_SERVER%" /td %SIGN_ALGORITHM% /fd %SIGN_ALGORITHM% "%FILE_TO_SIGN%"
+IF %ERRORLEVEL% NEQ 0 GOTO :SIGNING_FAILED
+
+ECHO Signing completed successfully.
+GOTO :END
+
+:SIGNING_FAILED
+ECHO ERROR: Signing failed with error code %ERRORLEVEL%.
+GOTO :ERROR
+
+:ERROR
+ECHO.
+ECHO Script execution failed.
+PAUSE
+EXIT /B 1
+
+:END
+ECHO.
+ECHO Script completed.
+PAUSE
+EXIT /B 0
+'@
+
+$BatchPath = "$env:TEMP\sign_embedded.bat"
+$Batch | Out-File -FilePath $BatchPath -Encoding ASCII
+cmd /c "`"$BatchPath`""
