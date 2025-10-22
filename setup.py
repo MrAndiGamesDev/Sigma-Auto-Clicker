@@ -214,7 +214,6 @@ class PyInstallerBuilder:
             self.logger("error", f"Build process failed: {exc}")
             self._exit_script(cleanup_delay)
 
-
 if __name__ == "__main__":
     PyBuilder = PyInstallerBuilder()
     PyBuilder.run()
