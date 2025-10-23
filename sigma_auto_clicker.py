@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, Final
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QLineEdit, QPushButton,
-    QTabWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTextEdit,
+    QTabWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTextEdit, QGraphicsDropShadowEffect,
     QComboBox, QSystemTrayIcon, QMenu, QFormLayout, QMessageBox, QDialog
 )
 from PySide6.QtGui import QIcon, QAction
@@ -62,7 +62,8 @@ class UpdateLogEntry:
         """Return a bullet-point representation of the description."""
         desc = self.description.strip()
         points = [p.strip() for p in desc.split(". ") if p.strip()]
-        if "and so much more" in desc.lower():
+        is_last_word = "and so much more"
+        if is_last_word in desc.lower():
             points.append("Various additional improvements")
         if not points:
             points = ["No details provided."]
@@ -76,7 +77,9 @@ class _MetaConfig(type):
 class Config(metaclass=_MetaConfig):
     """Immutable application configuration constants."""
 
-    # --- Application identity -------------------------------------------------
+    # ------------------------------------------------------------------
+    # Application identity
+    # ------------------------------------------------------------------
     APP_NAME: Final[str] = "Sigma Auto Clicker"
     AUTHORNAME: Final[str] = "MrAndiGamesDev"
     GITHUB_REPO: Final[str] = f"{AUTHORNAME}/Sigma-Auto-Clicker"
@@ -84,7 +87,9 @@ class Config(metaclass=_MetaConfig):
         f"https://raw.githubusercontent.com/{AUTHORNAME}/My-App-Icons/main/mousepointer.ico"
     )
 
-    # --- Defaults -------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Defaults
+    # ------------------------------------------------------------------
     DEFAULT_VERSION: Final[str] = "1.0.0"
     DEFAULT_THEME: Final[str] = "Dark"
     DEFAULT_COLOR: Final[str] = "Blue"
@@ -96,18 +101,24 @@ class Config(metaclass=_MetaConfig):
         "cycle_delay": "0.5",
     }
 
-    # --- Internals ------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
     UPDATE_CHECK_INTERVAL: Final[int] = 24 * 60 * 60 * 1000  # ms
     LOCK_PORT: Final[int] = random.randint(1024, 49151)
     PORTS: Final[str] = "127.0.0.1"
 
-    # --- Platform information -------------------------------------------------
+    # ------------------------------------------------------------------
+    # Platform information
+    # ------------------------------------------------------------------
     SYSTEM: Final[str] = platform.system()
     RELEASE: Final[str] = platform.release()
     VERSION: Final[str] = platform.version()
     MACHINE: Final[str] = platform.machine()
 
-    # --- Paths ----------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Paths
+    # ------------------------------------------------------------------
     HOME_DIR: Final[Path] = Path.home()
     APPDATA_DIR: Final[Path] = (
         HOME_DIR / "AppData" / "Roaming" / "SigmaAutoClicker"
@@ -115,7 +126,9 @@ class Config(metaclass=_MetaConfig):
         else HOME_DIR / ".sigma_autoclicker"
     )
 
-    # --- File names -----------------------------------------------------------
+    # ------------------------------------------------------------------
+    # File names
+    # ------------------------------------------------------------------
     HOTKEY: Final[str] = "Ctrl+F"
     HOTKEY_FILE: Final[Path] = APPDATA_DIR / "hotkey.txt"
     APP_ICON: Final[Path] = APPDATA_DIR / "mousepointer.ico"
@@ -125,22 +138,26 @@ class Config(metaclass=_MetaConfig):
     LOCK_FILE: Final[Path] = APPDATA_DIR / f"app.lock.{LOCK_PORT}"
     ADMIN_MODE_FILE: Final[Path] = APPDATA_DIR / "admin_mode.txt"
 
-    # --- Update history --------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Update history
+    # ------------------------------------------------------------------
     UPDATE_LOGS: Final[List[UpdateLogEntry]] = [
         UpdateLogEntry(
             date="2025-10-24",
             version="1.1.3",
             description=(
-                "Discord Rich Presence (Currently broken) removed from a code. "
-                "Fixed Logging UI Bug. "
+                "Removed Discord Rich Presence to trim dependencies and speed up startup. "
+                "Fixed Activity-Log UI bug that duplicated timestamps and broke scrolling. "
+                "Hardened network-request error handling to surface failures instead of swallowing them. "
+                "Rewrote update-checker internals for clearer feedback and higher reliability. "
+                "Squeezed idle CPU usage with micro-optimizations. "
+                "Added Always On Top Option To Enable/Disable."
             ),
         ),
         UpdateLogEntry(
             date="2025-10-22",
             version="1.1.2-beta.1",
-            description=(
-                "Integrated Discord Rich Presence (Currently broken) removed for now. "
-            ),
+            description="Integrated Discord Rich Presence (Currently broken) removed for now.",
         ),
         UpdateLogEntry(
             date="2025-10-22",
@@ -171,11 +188,7 @@ class Config(metaclass=_MetaConfig):
         UpdateLogEntry(
             date="2025-10-18",
             version="1.0.9",
-            description=(
-                "Tabs Improvements "
-                "Removed Notification during minimized "
-                "and so much more!"
-            ),
+            description="Tabs Improvements. Removed Notification during minimized. Various additional improvements.",
         ),
         UpdateLogEntry(
             date="2025-10-17",
@@ -232,9 +245,12 @@ class Config(metaclass=_MetaConfig):
         ),
     ]
 
+    # ------------------------------------------------------------------
+    # Public helpers
+    # ------------------------------------------------------------------
     @staticmethod
     def format_update_logs(
-        separator: str = "\n",
+        separator: str = "\n\n",
         logger: Optional[Logger] = None,
         bullet: str = "•",
     ) -> str:
@@ -243,7 +259,6 @@ class Config(metaclass=_MetaConfig):
         if not Config.UPDATE_LOGS:
             logger.log("⚠️ No update logs available.")
             return "No update logs available."
-
         try:
             entries = [
                 f"Version {entry.version} ({entry.date}){separator.rstrip()}\n{entry.to_bullets(bullet)}"
@@ -253,10 +268,13 @@ class Config(metaclass=_MetaConfig):
             logger.log(f"⚠️ Error formatting update logs: {e}")
             return "No valid update logs available."
 
-        footer = "=" * 39
+        footer = "=" * 50
         header = f"🖱️ {Config.APP_NAME} Update History 🖱️\n{footer}\n"
         return f"{header}{separator.join(entries)}\n{footer}\n"
 
+    # ------------------------------------------------------------------
+    # Persistence helpers
+    # ------------------------------------------------------------------
     @staticmethod
     def load_hotkey() -> str:
         """Return the hotkey stored on disk or the default."""
@@ -336,11 +354,26 @@ class FileManager:
 
     @staticmethod
     def write_file(filepath: Path, content: str) -> None:
-        """Write content to file."""
+        """Write content to file, repairing permissions if necessary."""
         FileManager.ensure_app_directory()
         try:
             filepath.write_text(content.strip(), encoding="utf-8")
             _LOGGING.debug("Wrote to %s: %s", filepath, content)
+        except PermissionError as exc:
+            _LOGGING.warning("Permission denied writing %s: %s", filepath, exc)
+            try:
+                # Attempt to fix permissions for the file and its parent directory
+                os.chmod(filepath.parent, 0o700)
+                if filepath.exists():
+                    os.chmod(filepath, 0o600)
+                else:
+                    # Create the file with restricted permissions
+                    filepath.touch(mode=0o600, exist_ok=True)
+                # Retry write
+                filepath.write_text(content.strip(), encoding="utf-8")
+                _LOGGING.debug("Repaired permissions and wrote to %s", filepath)
+            except Exception as repair_exc:
+                _LOGGING.error("Failed to repair permissions for %s: %s", filepath, repair_exc)
         except Exception as exc:
             _LOGGING.error("Error writing to %s: %s", filepath, exc)
 
@@ -500,11 +533,13 @@ class ThemeManager:
     # Public API
     # ------------------------------------------------------------------
     @classmethod
-    def apply_theme(cls,
-                    widget: QWidget,
-                    appearance: str,
-                    color_theme: str,
-                    logger: Optional[Logger] = None) -> None:
+    def apply_theme(
+        cls,
+        widget: QWidget,
+        appearance: str,
+        color_theme: str,
+        logger: Optional[Logger] = None
+    ) -> None:
         """Apply base theme and button palette to a widget tree."""
         logger = logger or Logger(None)
         appearance = appearance if appearance in cls.BASE_STYLES else Config.DEFAULT_THEME
@@ -562,16 +597,35 @@ class ThemeManager:
         """Fast hex color validation."""
         return bool(ThemeManager._HEX_COLOR_RE.fullmatch(color))
 
+    # ------------------------------------------------------------------
+    # System integration
+    # ------------------------------------------------------------------
+    @classmethod
+    def detect_system_theme(cls) -> str:
+        """Detect the current system-wide light/dark preference (Windows 10+)."""
+        if Config.SYSTEM != "Windows":
+            return Config.DEFAULT_THEME
+        try:
+            import winreg
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+            ) as key:
+                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+                return "Light" if value else "Dark"
+        except Exception:
+            return Config.DEFAULT_THEME
+
 class OSCompatibilityChecker:
     """Checks OS compatibility and requirements."""
-    SUPPORTED_PLATFORMS = {
+    SUPPORTED_PLATFORMS: Final[Dict[str, Dict[str, Any]]] = {
         "Windows": {
             "min_version": "10",
-            "required_libs": ["pyautogui", "keyboard", "requests", "PySide6", "psutil"],
+            "required_libs": ("pyautogui", "keyboard", "requests", "PySide6", "psutil"),
             "system_tray": True,
             "hotkeys": True,
             "pyautogui": True,
-            "admin_warning": False
+            "admin_warning": False,
         }
     }
 
@@ -648,8 +702,8 @@ class OSCompatibilityChecker:
         except:
             return False
 
-    @staticmethod
-    def request_admin_privileges() -> bool:
+    @classmethod
+    def request_admin_privileges(cls) -> bool:
         """Attempt to restart the application with admin privileges."""
         try:
             if Config.SYSTEM == "Windows":
@@ -828,7 +882,7 @@ class SingletonLock(QObject):
         self.listener_thread.start()
 
 class VersionManager:
-    """Manages application versioning and updates."""
+    """Manages application versioning and updates, including pre-release support."""
 
     _LOCAL_VERSION_FILE = Path('VERSION.txt')
 
@@ -866,29 +920,45 @@ class VersionManager:
         FileManager.write_file(Config.VERSION_CACHE_FILE, f"{version}\n{int(time.time())}")
 
     @staticmethod
-    def fetch_latest_release(timeout: float = 10.0) -> Dict[str, Any]:
-        """Fetch latest release info from GitHub."""
+    def fetch_latest_release(
+        timeout: float = 10.0, include_prerelease: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Fetch latest release info from GitHub.
+        If include_prerelease is True, will consider pre-releases as candidates.
+        """
         if not isinstance(timeout, (int, float)) or timeout <= 0:
             return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': 'Invalid timeout value'}
         if not Config.GITHUB_REPO:
             return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': 'Missing GitHub repository configuration'}
         try:
             headers = {'Accept': 'application/vnd.github.v3+json', 'User-Agent': Config.APP_NAME}
-            response = requests.get(
-                f"https://api.github.com/repos/{Config.GITHUB_REPO}/releases/latest",
-                headers=headers, timeout=timeout
-            )
+            # Fetch all releases to include pre-releases if requested
+            url = f"https://api.github.com/repos/{Config.GITHUB_REPO}/releases"
+            response = requests.get(url, headers=headers, timeout=timeout)
             response.raise_for_status()
-            data = response.json()
-            if not isinstance(data, dict):
-                return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': 'Invalid API response format'}
-            tag_name = data.get('tag_name', '').lstrip('v')
+            releases = response.json()
+            if not isinstance(releases, list) or not releases:
+                return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': 'No releases found'}
+
+            # Filter releases based on pre-release preference
+            candidates = [
+                r for r in releases
+                if (include_prerelease or not r.get('prerelease', True)) and r.get('tag_name')
+            ]
+            if not candidates:
+                return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': 'No suitable releases found'}
+
+            # Pick the first (latest) candidate
+            latest = candidates[0]
+            tag_name = latest.get('tag_name', '').lstrip('v')
             if not tag_name:
                 return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': 'No valid version found'}
             return {
                 'version': tag_name,
-                'download_url': data.get('html_url', f"https://github.com/{Config.GITHUB_REPO}/releases/latest"),
-                'release_notes': data.get('body', 'No release notes available'),
+                'download_url': latest.get('html_url', f"https://github.com/{Config.GITHUB_REPO}/releases/latest"),
+                'release_notes': latest.get('body', 'No release notes available'),
+                'prerelease': latest.get('prerelease', False),
                 'success': True
             }
         except (Timeout, ConnectionError, HTTPError, RequestException) as e:
@@ -916,12 +986,21 @@ class VersionManager:
 
     @staticmethod
     def is_newer_version(new: str, current: str) -> bool:
-        """Compare semantic versions."""
+        """Compare semantic versions, including pre-release identifiers."""
         def parse_version(v: str) -> tuple:
-            parts = [int(p) if p.isdigit() else 0 for p in v.split('.')[:3]]
-            return tuple(parts) + (0, 0, 0)[:3-len(parts)]
+            # Split into numeric and pre-release parts
+            parts = v.split('-', 1)
+            numeric_part = parts[0]
+            prerelease_part = parts[1] if len(parts) > 1 else ''
+            # Parse numeric part
+            nums = [int(p) if p.isdigit() else 0 for p in numeric_part.split('.')[:3]]
+            nums += [0] * (3 - len(nums))
+            # Pre-release priority: empty string > any pre-release
+            return (tuple(nums), prerelease_part)
         try:
-            return parse_version(new) > parse_version(current)
+            new_parsed = parse_version(new)
+            current_parsed = parse_version(current)
+            return new_parsed > current_parsed
         except Exception:
             return new > current
 
@@ -962,111 +1041,191 @@ class UpdateChecker(QThread):
         self.wait()
 
 class UIManager:
-    """Manages the application's user interface."""
-    def __init__(self, parent, logger: Logger):
+    """Centralized UI builder – keeps widget references in one dict."""
+
+    # ------------------------------------------------------------------
+    # Construction
+    # ------------------------------------------------------------------
+    def __init__(self, parent, logger: Logger) -> None:
         self.parent = parent
         self.logger = logger
-        self.widgets = {}
+        self.widgets: Dict[str, QWidget] = {}
 
+    # ------------------------------------------------------------------
+    # Public helpers
+    # ------------------------------------------------------------------
+    def update_version_display(self, current: str, latest: str | None = None) -> None:
+        """Refresh version labels and tray tooltip."""
+        self.widgets["version_display"].setText(f"v{current}")
+        self.widgets["current_version_label"].setText(f"Current: v{current}")
+        if latest:
+            self.widgets["latest_version_label"].setText(f"Latest: v{latest}")
+        self.widgets["last_check_label"].setText(
+            f"Last Check: {datetime.now():%Y-%m-%d %H:%M:%S}"
+        )
+        self.parent.tray.update_tooltip()
+
+    def update_admin_mode_button(self, is_admin: bool) -> None:
+        """Toggle the admin-mode button text."""
+        self.widgets["admin_mode_toggle"].setText(
+            "Disable Admin Mode" if is_admin else "Enable Admin Mode"
+        )
+
+    # ------------------------------------------------------------------
+    # Factory helpers
+    # ------------------------------------------------------------------
+    def _make_line_edit(self, key: str, default: str, placeholder: str = "") -> QLineEdit:
+        le = QLineEdit(default)
+        if placeholder:
+            le.setPlaceholderText(placeholder)
+        self.widgets[key] = le
+        return le
+
+    def _make_combo(self, key: str, items: List[str], handler) -> QComboBox:
+        cb = QComboBox()
+        cb.addItems(items)
+        cb.currentTextChanged.connect(handler)
+        self.widgets[key] = cb
+        return cb
+
+    def _make_button(self, text: str, handler) -> QPushButton:
+        btn = QPushButton(text)
+        btn.clicked.connect(handler)
+        return btn
+
+    # ------------------------------------------------------------------
+    # Major UI sections
+    # ------------------------------------------------------------------
     def create_header(self) -> QWidget:
-        """Create the header with version and update button."""
+        """Top bar with title, version and update button."""
         layout = QHBoxLayout()
-        header_label = QLabel(f"🖱️ {Config.APP_NAME}")
-        header_label.setStyleSheet("font-size: 22px; font-weight: bold;")
-        self.widgets['version_display'] = QLabel(f"(v{self.parent.current_version})")
-        self.widgets['version_display'].setStyleSheet("font-size: 20px; font-weight: bold;")
-        update_btn = QPushButton("🔄 Check Updates")
-        update_btn.clicked.connect(self.parent.check_for_updates)
-        layout.addWidget(header_label)
-        layout.addWidget(self.widgets['version_display'])
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        title = QLabel(f"🖱️ {Config.APP_NAME}")
+        title.setStyleSheet("font-size:22px;font-weight:bold;")
+
+        version = QLabel(f"(v{self.parent.current_version})")
+        version.setStyleSheet("font-size:20px;font-weight:bold;")
+        self.widgets["version_display"] = version
+
+        update_btn = self._make_button("🔄 Check Updates", self.parent.check_for_updates)
+
+        layout.addWidget(title)
+        layout.addWidget(version)
         layout.addStretch()
         layout.addWidget(update_btn)
-        widget = QWidget()
-        widget.setLayout(layout)
-        return widget
+
+        w = QWidget()
+        w.setLayout(layout)
+        return w
 
     def create_click_settings(self) -> QGroupBox:
-        """Create click settings group box."""
+        """Click-parameter inputs."""
         group = QGroupBox("🖱️ Click Settings")
         form = QFormLayout()
-        settings = [
-            ('click_count', "Clicks per Cycle", Config.DEFAULT_SETTINGS["click_count"]),
-            ('loop_count', "Max Cycles (0=∞)", Config.DEFAULT_SETTINGS["loop_count"]),
-            ('click_delay', "Delay Between Clicks (s)", Config.DEFAULT_SETTINGS["click_delay"]),
-            ('cycle_delay', "Delay Between Cycles (s)", Config.DEFAULT_SETTINGS["cycle_delay"]),
-            ('hotkey_input', "Hotkey", Config.load_hotkey(), "e.g., Ctrl+F, Alt+Shift+G")
-        ]
-        for key, label, default, *extras in settings:
-            widget = QLineEdit(default)
-            if extras:
-                widget.setPlaceholderText(extras[0])
-            self.widgets[key] = widget
-            form.addRow(f"{label}:", widget)
-        self.widgets['hotkey_apply'] = QPushButton("Apply Hotkey")
-        self.widgets['hotkey_apply'].clicked.connect(self.parent.update_hotkey)
-        form.addRow("", self.widgets['hotkey_apply'])
+
+        defs = Config.DEFAULT_SETTINGS
+        form.addRow("Clicks per Cycle:", self._make_line_edit("click_count", defs["click_count"]))
+        form.addRow("Max Cycles (0=∞):", self._make_line_edit("loop_count", defs["loop_count"]))
+        form.addRow("Delay Between Clicks (s):", self._make_line_edit("click_delay", defs["click_delay"]))
+        form.addRow("Delay Between Cycles (s):", self._make_line_edit("cycle_delay", defs["cycle_delay"]))
+
+        hotkey = self._make_line_edit("hotkey_input", Config.load_hotkey(), "e.g., Ctrl+F, Alt+Shift+G")
+        form.addRow("Hotkey:", hotkey)
+
+        apply_btn = self._make_button("Apply Hotkey", self.parent.update_hotkey)
+        self.widgets["hotkey_apply"] = apply_btn
+        form.addRow("", apply_btn)
+
         group.setLayout(form)
         return group
 
     def create_theme_settings(self) -> QGroupBox:
-        """Create theme settings group box with admin mode toggle."""
+        """Theme & admin-mode controls."""
         group = QGroupBox("🎨 Interface")
         form = QFormLayout()
-        self.widgets['appearance_combo'] = QComboBox()
-        self.widgets['appearance_combo'].addItems(["Dark", "Light"])
-        self.widgets['appearance_combo'].currentTextChanged.connect(self.parent.update_theme)
-        self.widgets['color_combo'] = QComboBox()
-        self.widgets['color_combo'].addItems(list(ThemeManager.COLOR_THEMES.keys()))
-        self.widgets['color_combo'].currentTextChanged.connect(self.parent.update_color_theme)
-        self.widgets['admin_mode_toggle'] = QPushButton("Enable Admin Mode")
-        self.widgets['admin_mode_toggle'].clicked.connect(self.parent.toggle_admin_mode)
-        self.widgets['progress_label'] = QLabel("Cycles: 0")
-        self.widgets['progress_label'].setAlignment(Qt.AlignRight)
-        form.addRow("Appearance Mode:", self.widgets['appearance_combo'])
-        form.addRow("Color Theme:", self.widgets['color_combo'])
-        form.addRow("Admin Mode:", self.widgets['admin_mode_toggle'])
-        form.addRow("Progress:", self.widgets['progress_label'])
+
+        form.addRow(
+            "Appearance Mode:",
+            self._make_combo("appearance_combo", ["Dark", "Light"], self.parent.update_theme),
+        )
+        form.addRow(
+            "Color Theme:",
+            self._make_combo(
+                "color_combo", list(ThemeManager.COLOR_THEMES.keys()), self.parent.update_color_theme
+            ),
+        )
+
+        admin_btn = self._make_button("Enable Admin Mode", self.parent.toggle_admin_mode)
+        self.widgets["admin_mode_toggle"] = admin_btn
+        form.addRow("Admin Mode:", admin_btn)
+
+        # Always on Top toggle switch
+        always_on_top_switch = self._make_button("Enable/Disable", self.parent.toggle_always_on_top)
+        self.widgets["always_on_top_toggle"] = always_on_top_switch
+        form.addRow("Always on Top:", always_on_top_switch)
+
+        progress = QLabel("Cycles: 0")
+        progress.setAlignment(Qt.AlignRight)
+        self.widgets["progress_label"] = progress
+        form.addRow("Progress:", progress)
+
         group.setLayout(form)
         return group
 
     def create_update_tab(self) -> QWidget:
-        """Create Updates tab content."""
+        """Updates / changelog tab."""
         widget = QWidget()
         layout = QVBoxLayout()
-        version_group = QGroupBox("📋 Version Information")
-        v_layout = QVBoxLayout()
-        self.widgets['current_version_label'] = QLabel(f"Current: v{self.parent.current_version}")
-        self.widgets['latest_version_label'] = QLabel("Latest: Checking...")
-        self.widgets['last_check_label'] = QLabel("Last Check: Never")
-        v_layout.addWidget(self.widgets['current_version_label'])
-        v_layout.addWidget(self.widgets['latest_version_label'])
-        v_layout.addWidget(self.widgets['last_check_label'])
-        version_group.setLayout(v_layout)
-        layout.addWidget(version_group)
-        self.widgets['update_text'] = QTextEdit()
-        self.widgets['update_text'].setReadOnly(True)
-        self.widgets['update_text'].setPlainText(Config.format_update_logs())
-        layout.addWidget(self.widgets['update_text'])
+
+        info_group = QGroupBox("📋 Version Information")
+        vbox = QVBoxLayout()
+        current_lbl = QLabel(f"Current: v{self.parent.current_version}")
+        latest_lbl = QLabel("Latest: Checking...")
+        last_lbl = QLabel("Last Check: Never")
+
+        for key, w in zip(
+            ("current_version_label", "latest_version_label", "last_check_label"),
+            (current_lbl, latest_lbl, last_lbl),
+        ):
+            self.widgets[key] = w
+            vbox.addWidget(w)
+
+        info_group.setLayout(vbox)
+        layout.addWidget(info_group)
+
+        changelog = QTextEdit()
+        changelog.setReadOnly(True)
+        changelog.setPlainText(Config.format_update_logs())
+        self.widgets["update_text"] = changelog
+        layout.addWidget(changelog)
+
         widget.setLayout(layout)
         return widget
 
     def create_credits_tab(self) -> QWidget:
-        """Create Credits tab content."""
+        """Credits / about tab."""
         widget = QWidget()
         layout = QVBoxLayout()
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
-        header_label = QLabel("📄 Credits")
-        header_label.setStyleSheet("font-size: 22px; font-weight: bold;")
-        layout.addWidget(header_label)
-        credits_group = QGroupBox("👥 Contributors & Credits")
-        credits_layout = QVBoxLayout()
-        credits_content = (
+
+        header = QLabel("📄 Credits")
+        header.setStyleSheet("font-size:22px;font-weight:bold;")
+        layout.addWidget(header)
+
+        group = QGroupBox("👥 Contributors & Credits")
+        vbox = QVBoxLayout()
+
+        text = QTextEdit()
+        text.setReadOnly(True)
+        text.setFixedHeight(380)
+        text.setPlainText(
             f"Developed by: {Config.AUTHORNAME}\n"
             f"GitHub: https://github.com/{Config.AUTHORNAME}\n\n"
             "Contributors:\n"
             f"- Lead Developer: {Config.AUTHORNAME}\n"
-            "- UI/UX Design: MrAndiGamesDev\n"
+            f"- UI/UX Design: {Config.AUTHORNAME}\n"
             "- Special Thanks: Open Source Community\n\n"
             "Libraries Used:\n"
             "- PySide6: GUI Framework\n"
@@ -1074,95 +1233,94 @@ class UIManager:
             "- Requests: HTTP Requests\n"
             "- Keyboard: Hotkey Support\n"
             "- Psutil: System Resources Monitoring\n\n"
-            f"Version: {self.parent.current_version}"
         )
-        self.widgets['credits_text'] = QTextEdit()
-        self.widgets['credits_text'].setReadOnly(True)
-        self.widgets['credits_text'].setPlainText(credits_content)
-        self.widgets['credits_text'].setFixedHeight(380)
-        credits_layout.addWidget(self.widgets['credits_text'])
-        credits_group.setLayout(credits_layout)
-        layout.addWidget(credits_group)
-        github_btn = QPushButton("🌐 Visit GitHub")
-        github_btn.setFixedWidth(150)
-        github_btn.clicked.connect(lambda: webbrowser.open(f"https://github.com/{Config.GITHUB_REPO}"))
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-        button_layout.addWidget(github_btn)
-        button_layout.addStretch()
-        layout.addLayout(button_layout)
+        self.widgets["credits_text"] = text
+        vbox.addWidget(text)
+        group.setLayout(vbox)
+        layout.addWidget(group)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        gh_btn = self._make_button("🌐 Visit GitHub", lambda: webbrowser.open(f"https://github.com/{Config.GITHUB_REPO}"))
+        gh_btn.setFixedWidth(150)
+        btn_layout.addWidget(gh_btn)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
         layout.addStretch()
+
         widget.setLayout(layout)
         return widget
 
-    def update_version_display(self, current: str, latest: str = None) -> None:
-        """Update version display in UI."""
-        self.widgets['version_display'].setText(f"v{current}")
-        self.widgets['current_version_label'].setText(f"Current: v{current}")
-        if latest:
-            self.widgets['latest_version_label'].setText(f"Latest: v{latest}")
-        self.widgets['last_check_label'].setText(f"Last Check: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        self.parent.tray.update_tooltip()
-
-    def update_admin_mode_button(self, is_admin: bool) -> None:
-        """Update the admin mode toggle button text."""
-        self.widgets['admin_mode_toggle'].setText("Disable Admin Mode" if is_admin else "Enable Admin Mode")
-
 class SystemTrayManager:
     """Manages system tray functionality."""
-    def __init__(self, parent, logger: Logger):
+
+    def __init__(self, parent, logger: Logger) -> None:
         self.parent = parent
         self.logger = logger
-        self.tray_icon = None
-        self.setup_tray()
+        self.tray_icon: Optional[QSystemTrayIcon] = None
+        self._ensure_tray()
 
-    def setup_tray(self) -> None:
-        """Set up system tray icon and menu."""
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+    def update_tooltip(self) -> None:
+        """Refresh tooltip to reflect current state."""
+        if not self.tray_icon:
+            return
+        mode = "Admin" if self.parent.is_admin_mode else "Normal"
+        self.tray_icon.setToolTip(
+            f"{Config.APP_NAME} (v{self.parent.current_version}, {mode} Mode)"
+        )
+
+    def refresh_menu(self) -> None:
+        """Rebuild the context menu to pick up state changes."""
+        if self.tray_icon:
+            self.tray_icon.setContextMenu(self._build_menu())
+
+    def update_tray_menu(self) -> None:
+        """Alias for refresh_menu to match external calls."""
+        self.refresh_menu()
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+    def _ensure_tray(self) -> None:
+        """Create and show the tray icon; fail gracefully."""
         try:
             icon_path = FileManager.download_icon()
             self.tray_icon = QSystemTrayIcon(QIcon(icon_path))
             self.update_tooltip()
-            self.tray_icon.setContextMenu(self.create_tray_menu())
-            self.tray_icon.activated.connect(self.on_tray_activated)
+            self.tray_icon.setContextMenu(self._build_menu())
+            self.tray_icon.activated.connect(self._on_activated)
             self.tray_icon.show()
-        except Exception as e:
-            self.logger.log(f"Tray setup failed: {e}")
+        except Exception as exc:
+            self.logger.log(f"Tray setup failed: {exc}")
 
-    def update_tooltip(self) -> None:
-        """Update system tray tooltip."""
-        if self.tray_icon:
-            mode = "Admin" if self.parent.is_admin_mode else "Normal"
-            self.tray_icon.setToolTip(f"{Config.APP_NAME} (v{self.parent.current_version}, {mode} Mode)")
-
-    def create_tray_menu(self) -> QMenu:
-        """Create system tray menu."""
+    def _build_menu(self) -> QMenu:
+        """Construct the context menu dynamically."""
         menu = QMenu()
-        actions = [
-            ("👁️ Show", self.parent.show_normal),
-            (f"▶️ Start/Stop ({self.parent.hotkey_manager.current_hotkey})", self.parent.toggle_clicking),
-            (f"{'🔓 Disable' if self.parent.is_admin_mode else '🔒 Enable'} Admin Mode", self.parent.toggle_admin_mode),
-            ("🔄 Check Updates", self.parent.check_for_updates),
-            (None, None),
-            ("❌ Quit", self.parent.quit_app)
-        ]
-        for text, callback in actions:
-            if text is None:
-                menu.addSeparator()
-                continue
+
+        def add(text: str, callback: callable) -> QAction:
             action = QAction(text, self.parent)
-            if callback:
-                action.triggered.connect(callback)
+            action.triggered.connect(callback)
             menu.addAction(action)
+            return action
+
+        add("👁️ Show", self.parent.show_normal)
+        add(f"▶️ Start/Stop ({self.parent.hotkey_manager.current_hotkey})",self.parent.toggle_clicking)
+        add(f"{'🔓 Disable' if self.parent.is_admin_mode else '🔒 Enable'} Admin Mode", self.parent.toggle_admin_mode)
+        add("🔄 Check Updates", self.parent.check_for_updates)
+
+        menu.addSeparator()
+        add("❌ Quit", self.parent.quit_app)
         return menu
 
-    def update_tray_menu(self) -> None:
-        """Update tray menu with current hotkey and admin mode."""
-        if self.tray_icon:
-            self.tray_icon.setContextMenu(self.create_tray_menu())
-
-    def on_tray_activated(self, reason) -> None:
-        """Handle tray icon activation."""
-        if reason in (QSystemTrayIcon.ActivationReason.DoubleClick, QSystemTrayIcon.ActivationReason.Trigger):
+    # ------------------------------------------------------------------
+    # Event handlers
+    # ------------------------------------------------------------------
+    def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        """Handle left-click / double-click on the tray icon."""
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger,QSystemTrayIcon.ActivationReason.DoubleClick):
             self.parent.show_normal()
 
 class ClickerEngine:
@@ -1361,6 +1519,17 @@ class AutoClickerApp(QMainWindow):
         else:
             self.clicker.start()
 
+    def toggle_always_on_top(self) -> None:
+        """Toggle the window always-on-top flag."""
+        flags = self.windowFlags()
+        if flags & Qt.WindowStaysOnTopHint:
+            self.setWindowFlags(flags & ~Qt.WindowStaysOnTopHint)
+            self.logger.log("🔓 Disabled always-on-top")
+        else:
+            self.setWindowFlags(flags | Qt.WindowStaysOnTopHint)
+            self.logger.log("🔒 Enabled always-on-top")
+        self.show()  # Required to apply the new flags
+
     def update_hotkey(self) -> None:
         """Update the hotkey based on user input."""
         new_hotkey = self.ui.widgets.get('hotkey_input').text().strip()
@@ -1448,90 +1617,143 @@ class AutoClickerApp(QMainWindow):
         QApplication.quit()
 
 class InstanceDialog(QDialog):
-    """Dialog for handling multiple instance detection."""
+    """Premium-styled dialog for handling multiple instance detection."""
     def __init__(self, lockfile_path: Path, logger: Logger, parent=None):
         super().__init__(parent)
         self.lockfile_path = lockfile_path
         self.logger = logger
-        self.setWindowTitle(f"{Config.APP_NAME} - Instance Detected")
-        self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint | Qt.WindowCloseButtonHint)
+        self.setWindowTitle(f"{Config.APP_NAME} – Instance Detected")
+        self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
         self.setModal(True)
-        self.setFixedSize(500, 200)
+        self.setFixedSize(480, 240)
         self._build_ui()
+        self._apply_shadow()
 
     # ------------------------------------------------------------------
     # UI Construction
     # ------------------------------------------------------------------
     def _build_ui(self) -> None:
-        """Assemble the dialog layout and widgets."""
-        main_layout = QVBoxLayout()
-        main_layout.addLayout(self._create_header())
-        main_layout.addWidget(self._create_message())
-        main_layout.addLayout(self._create_buttons())
-        self.setLayout(main_layout)
+        """Assemble the premium dialog layout and widgets."""
+        main = QVBoxLayout()
+        main.setContentsMargins(0, 0, 0, 0)
+        frame = QWidget()
+        frame.setObjectName("dialogFrame")
+        frame.setStyleSheet("""
+            QWidget#dialogFrame{
+                background-color:#1e1e2e;
+                border-radius:16px;
+                border:1px solid #333;
+            }
+        """)
+        lay = QVBoxLayout(frame)
+        lay.setSpacing(12)
+        lay.setContentsMargins(24, 24, 24, 24)
+
+        lay.addLayout(self._create_header())
+        lay.addWidget(self._create_message())
+        lay.addLayout(self._create_buttons())
+        main.addWidget(frame)
+        self.setLayout(main)
 
     def _create_header(self) -> QHBoxLayout:
-        """Create the header row with icon and title."""
-        layout = QHBoxLayout()
+        """Create the sleek header with icon and title."""
+        lay = QHBoxLayout()
         icon = QLabel("🖱️")
-        icon.setStyleSheet("font-size: 24px; margin: 5px;")
-        title = QLabel(f"{Config.APP_NAME} is already running!")
-        title.setStyleSheet(
-            "font-size: 16px; font-weight: bold; color: #d32f2f; margin-left: 10px;"
-        )
-        layout.addWidget(icon)
-        layout.addWidget(title)
-        layout.addStretch()
-        return layout
+        icon.setStyleSheet("font-size:28px; padding:0px;")
+        title = QLabel("Already Running")
+        title.setStyleSheet("""
+            font-size:18px;
+            font-weight:600;
+            color:#ffffff;
+            letter-spacing:0.5px;
+        """)
+        lay.addWidget(icon)
+        lay.addWidget(title, 1)
+        close = QPushButton("✕")
+        close.setFixedSize(28, 28)
+        close.setStyleSheet("""
+            QPushButton{
+                background-color:#2e2e3e;
+                color:#aaa;
+                border:none;
+                border-radius:14px;
+                font-weight:bold;
+                font-size:14px;
+            }
+            QPushButton:hover{background-color:#ff4757; color:#fff;}
+        """)
+        close.clicked.connect(self.reject)
+        lay.addWidget(close)
+        return lay
 
     def _create_message(self) -> QLabel:
-        """Create the informational message label."""
-        label = QLabel(
-            "An instance of the application is already active.\n\nWhat would you like to do?"
+        """Create the refined message label."""
+        lbl = QLabel(
+            "An instance of Sigma Auto Clicker is currently active.<br><br>"
+            "How would you like to proceed?"
         )
-        label.setWordWrap(True)
-        label.setStyleSheet(
-            "font-size: 12px; color: #333; padding: 15px; "
-            "background-color: #f5f5f5; border-radius: 5px; margin: 10px;"
-        )
-        return label
+        lbl.setWordWrap(True)
+        lbl.setStyleSheet("""
+            font-size:14px;
+            color:#c9c9d9;
+            line-height:22px;
+            padding:16px;
+            background-color:rgba(255,255,255,5);
+            border-radius:8px;
+        """)
+        return lbl
 
     def _create_buttons(self) -> QHBoxLayout:
-        """Create the action buttons row."""
-        layout = QHBoxLayout()
-        self.force_btn = QPushButton("⚠️ Force New Instance")
-        self.exit_btn = QPushButton("🚪 Exit")
-        self.force_btn.setStyleSheet(self._button_style("#ff9800", "#e68900"))
-        self.exit_btn.setStyleSheet(self._button_style("#f44336", "#da190b"))
+        """Create premium action buttons."""
+        lay = QHBoxLayout()
+        lay.setSpacing(12)
+        self.force_btn = QPushButton("Force New Instance")
+        self.exit_btn = QPushButton("Exit")
+        for btn, accent, hover in (
+            (self.force_btn, "#ff9800", "#e68900"),
+            (self.exit_btn, "#f44336", "#da190b"),
+        ):
+            btn.setFixedHeight(42)
+            btn.setStyleSheet(f"""
+                QPushButton{{
+                    background-color:{accent};
+                    color:#ffffff;
+                    border:none;
+                    border-radius:8px;
+                    font-weight:600;
+                    font-size:14px;
+                    padding:0 20px;
+                }}
+                QPushButton:hover{{background-color:{hover};}}
+            """)
         self.exit_btn.clicked.connect(self.reject)
         self.force_btn.clicked.connect(self._on_force_new)
-        layout.addWidget(self.force_btn)
-        layout.addWidget(self.exit_btn)
-        layout.addStretch()
-        return layout
+        lay.addWidget(self.force_btn)
+        lay.addWidget(self.exit_btn)
+        return lay
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-    @staticmethod
-    def _button_style(base: str, hover: str) -> str:
-        """Return a consistent QPushButton stylesheet."""
-        return (
-            f"QPushButton {{ background-color: {base}; color: white; border: none; "
-            f"padding: 8px 16px; border-radius: 4px; font-weight: bold; }}"
-            f"QPushButton:hover {{ background-color: {hover}; }}"
-        )
+    def _apply_shadow(self) -> None:
+        """Add drop shadow for depth."""
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(24)
+        shadow.setOffset(0, 8)
+        shadow.setColor("#00000080")
+        self.setGraphicsEffect(shadow)
 
     # ------------------------------------------------------------------
     # Event Handlers
     # ------------------------------------------------------------------
     def _on_force_new(self) -> None:
-        """Prompt for confirmation and close with custom code (2) if approved."""
+        """Prompt for confirmation and close with code 2 if approved."""
         choice = QMessageBox.warning(
             self,
-            "Warning",
-            "Running multiple instances may cause conflicts and instability!\n\n"
-            "Would you like to continue?",
+            "Confirmation",
+            "Running multiple instances may cause conflicts and instability.\n\n"
+            "Are you sure you want to continue?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -1541,80 +1763,98 @@ class InstanceDialog(QDialog):
 class ApplicationLauncher:
     """Handles application startup with singleton enforcement."""
 
-    def __init__(self) -> None:
-        self.logger = self._ensure_directories_and_log()
-
-    def _ensure_directories_and_log(self) -> Logger:
+    @staticmethod
+    def _setup_logger() -> Logger:
         FileManager.ensure_app_directory()
         return Logger(None)
 
-    def _check_os_compatibility(self) -> bool:
-        compat = OSCompatibilityChecker.check_compatibility(self.logger)
-        OSCompatibilityChecker.show_compatibility_dialog(compat, self.logger)
-        return compat["compatible"]
+    @staticmethod
+    def _check_os_compatibility(logger: Logger) -> bool:
+        compat_result = OSCompatibilityChecker.check_compatibility(logger)
+        OSCompatibilityChecker.show_compatibility_dialog(compat_result, logger)
+        return compat_result["compatible"]
 
-    def _build_qapp(self) -> QApplication:
+    @staticmethod
+    def _build_qapplication() -> QApplication:
+        # Disable automatic DPI scaling and native dialogs for consistent behavior
+        # Override default DPI awareness to avoid "Access is denied" warnings on Windows
+        QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+        # Explicitly set DPI awareness context via qt.conf-like environment variable
+        os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"
+        os.environ["QT_WINDOWS_DPI_AWARENESS"] = "unaware"
         app = QApplication(sys.argv)
         app.setQuitOnLastWindowClosed(False)
         app.setApplicationName(Config.APP_NAME)
         app.setOrganizationName(Config.AUTHORNAME)
         return app
 
-    def _set_app_icon(self, app: QApplication) -> None:
+    @staticmethod
+    def _set_app_icon(app: QApplication, logger: Logger) -> None:
         try:
             icon_path = FileManager.download_icon()
             app.setWindowIcon(QIcon(icon_path))
         except Exception as e:
-            self.logger.log(f"Failed to set app icon: {e}")
+            logger.log(f"Failed to set app icon: {e}")
 
-    def _handle_singleton_lock(self, lock: "SingletonLock") -> bool:
+    @staticmethod
+    def _handle_singleton_lock(logger: Logger) -> SingletonLock:
+        lock = SingletonLock(logger=logger)
         acquired = lock.acquire_lock()
-        if acquired is not None:
-            return True
-
-        dialog = InstanceDialog(lock.lockfile_path, self.logger)
-        result = dialog.exec()
-
-        if result == QDialog.Accepted:
-            if lock.activate_existing():
-                self.logger.log("Activated existing instance")
+        if acquired is None:
+            dialog = InstanceDialog(lock.lockfile_path, logger)
+            result = dialog.exec()
+            if result == QDialog.Accepted:
+                if lock.activate_existing():
+                    logger.log("Activated existing instance")
+                    sys.exit(0)
+                else:
+                    QMessageBox.critical(None, "❌ Error", "Could not activate existing instance.")
+                    sys.exit(1)
+            elif result == 2:
+                lock.release_lock()
+                if lock.lockfile_path.exists():
+                    try:
+                        lock.lockfile_path.unlink()
+                    except Exception as e:
+                        QMessageBox.warning(None, "⚠️ Warning", f"Could not delete lock file: {e}")
+                acquired = lock.acquire_lock()
+                if acquired is None:
+                    QMessageBox.critical(None, "❌ Error", "Could not create new instance.")
+                    sys.exit(1)
+                logger.log("Forced new instance created")
+            else:
                 sys.exit(0)
-            QMessageBox.critical(None, "❌ Error", "Could not activate existing instance.")
-            sys.exit(1)
+        return lock
 
-        if result == 2:
-            lock.release_lock()
-            if lock.lockfile_path.exists():
-                lock.lockfile_path.unlink()
-            if lock.acquire_lock() is None:
-                QMessageBox.critical(None, "❌ Error", "Could not create new instance.")
-                sys.exit(1)
-            self.logger.log("Forced new instance created")
-            return True
-
-        sys.exit(0)
-
-    def run(self) -> None:
-        if not self._check_os_compatibility():
-            sys.exit(1)
-
-        app = self._build_qapp()
-        self._set_app_icon(app)
-
-        lock = SingletonLock(logger=self.logger)
-        if not self._handle_singleton_lock(lock):
-            sys.exit(1)
-
+    @staticmethod
+    def _run_main_app(app: QApplication, lock: SingletonLock, logger: Logger) -> None:
         try:
             window = AutoClickerApp(lock)
             window.show()
             sys.exit(app.exec())
         except Exception as e:
-            self.logger.log(f"Application error: {e}")
+            logger.log(f"Application error: {e}")
             sys.exit(1)
         finally:
             lock.release_lock()
 
+    @staticmethod
+    def run() -> None:
+        """Main application entry point."""
+        logger = ApplicationLauncher._setup_logger()
+        if not ApplicationLauncher._check_os_compatibility(logger):
+            sys.exit(1)
+
+        app = ApplicationLauncher._build_qapplication()
+        ApplicationLauncher._set_app_icon(app, logger)
+        
+        lock = ApplicationLauncher._handle_singleton_lock(logger)
+        ApplicationLauncher._run_main_app(app, lock, logger)
+
 if __name__ == "__main__":
-    Launcher = ApplicationLauncher()
-    Launcher.run()
+    try:
+        Launcher = ApplicationLauncher()
+        Launcher.run()
+    except Exception as e:
+        logger.log(f"Application error: {e}")
+        sys.exit(1)

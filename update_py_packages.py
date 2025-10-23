@@ -79,7 +79,7 @@ class PackageUpdater:
             if not success:
                 self.exit_script(duration)
         except Exception as e:
-            Logging.Log("error", f"Unexpected error in main: {e}")
+            self._log("error", f"Unexpected error in main: {e}")
             self.exit_script(duration)
 
 if __name__ == "__main__":

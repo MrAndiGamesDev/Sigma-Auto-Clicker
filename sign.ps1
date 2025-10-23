@@ -71,7 +71,13 @@ $Executable = "dist\Sigma Auto Clicker (v$Version).exe"
 #endregion
 
 # Early exit if PFX already present
-if (Test-CertFile $CertPath) { exit }
+if (Test-CertFile $CertPath) { 
+    # Launch certmgr.msc if it exists
+    if (Get-Command certmgr.msc -ErrorAction SilentlyContinue) {
+        Start-Process certmgr.msc
+    }
+    exit 
+}
 
 # Load password once
 $SecurePassword = Get-PfxPassword
@@ -88,6 +94,10 @@ if ($ExistingCert) {
 
     if ($DaysLeft -gt 0) {
         Write-Host "Certificate is still valid. Skipping creation." -ForegroundColor Yellow
+        # Launch certmgr.msc if it exists
+        if (Get-Command certmgr.msc -ErrorAction SilentlyContinue) {
+            Start-Process certmgr.msc
+        }
         exit
     }
     Remove-ExpiredCert $ExistingCert
@@ -115,6 +125,11 @@ try {
 Write-Host "`nCertificate creation completed successfully!" -ForegroundColor Green
 Write-Host "To use this certificate for signing:" -ForegroundColor Cyan
 Write-Host "Set-AuthenticodeSignature -FilePath '$Executable' -Certificate (Get-ChildItem Cert:\CurrentUser\My\$($Cert.Thumbprint))" -ForegroundColor White
+
+# Launch certmgr.msc if it exists
+if (Get-Command certmgr.msc -ErrorAction SilentlyContinue) {
+    Start-Process certmgr.msc
+}
 
 # Invoke embedded batch signing script
 $Batch = @'
