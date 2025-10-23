@@ -160,7 +160,8 @@ class Config(metaclass=_MetaConfig):
                 "Streamlined settings persistence to reduce disk writes and extend SSD life. "
                 "Added optional start-with-system toggle via registry or launch-agent. "
                 "Bundled updated SSL certificates to prevent update-check failures on older systems. "
-                "Performed code-wide linting and type-hint coverage for maintainability."
+                "Performed code-wide linting and type-hint coverage for maintainability. "
+                "Added a splashscreen when opening an app (Not Animated on an executable file atm). "
             ),
         ),
         UpdateLogEntry(
