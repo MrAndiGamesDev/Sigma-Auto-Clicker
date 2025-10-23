@@ -71,6 +71,7 @@ class PyInstallerBuilder:
             "--optimize=2",
             f"--add-data={self.icon_path};src/icons/",
             f"--add-data={self.version_file};.",
+            f"--add-data=Sigma-Auto-Clicker-Py/;.",
             "--collect-submodules=Sigma-Auto-Clicker-Py/",
             "--log-level=WARN",
         ]
