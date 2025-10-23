@@ -7,7 +7,6 @@ from src.Packages.CustomLogging import Logging
 
 class PackageUpdater:
     """Manages updating outdated Python packages using pip."""
-
     def __init__(self):
         """Initialize with custom logger."""
         self.logger = Logging.Log
@@ -40,7 +39,6 @@ class PackageUpdater:
         if not packages:
             self._log("info", "All packages are up to date.")
             return True
-
         try:
             self._log("info", f"Updating {len(packages)} package(s): {', '.join(packages)}")
             result = subprocess.run(

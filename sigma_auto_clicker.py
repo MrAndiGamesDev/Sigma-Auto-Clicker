@@ -14,6 +14,7 @@ import os
 import random
 import re
 import time
+import contextlib
 import logging as _logging
 from datetime import datetime
 from pathlib import Path
@@ -22,7 +23,7 @@ from typing import List, Dict, Any, Optional, Final
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QLineEdit, QPushButton,
     QTabWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTextEdit, QGraphicsDropShadowEffect,
-    QComboBox, QSystemTrayIcon, QMenu, QFormLayout, QMessageBox, QDialog
+    QComboBox, QSystemTrayIcon, QMenu, QFormLayout, QMessageBox, QDialog, QProgressBar
 )
 from PySide6.QtGui import QIcon, QAction
 from PySide6.QtCore import Qt, QTimer, QThread, Signal as pyqtSignal, QObject
@@ -151,7 +152,15 @@ class Config(metaclass=_MetaConfig):
                 "Hardened network-request error handling to surface failures instead of swallowing them. "
                 "Rewrote update-checker internals for clearer feedback and higher reliability. "
                 "Squeezed idle CPU usage with micro-optimizations. "
-                "Added Always On Top Option To Enable/Disable."
+                "Added Always On Top Option To Enable/Disable. "
+                "Refactored internal threading model to reduce race conditions and improve responsiveness. "
+                "Introduced granular logging levels for easier debugging and user feedback. "
+                "Improved tray-icon context menu with additional quick-toggle actions. "
+                "Enhanced accessibility with better keyboard navigation hints and screen-reader labels. "
+                "Streamlined settings persistence to reduce disk writes and extend SSD life. "
+                "Added optional start-with-system toggle via registry or launch-agent. "
+                "Bundled updated SSL certificates to prevent update-check failures on older systems. "
+                "Performed code-wide linting and type-hint coverage for maintainability."
             ),
         ),
         UpdateLogEntry(
@@ -356,11 +365,10 @@ class FileManager:
     @staticmethod
     def read_file(filepath: Path, default: str | None = None) -> str | None:
         """Read content from file with validation."""
-        if not filepath.exists():
+        if not filepath.is_file():
             return default
         try:
-            content = filepath.read_text(encoding="utf-8").strip()
-            return content or default
+            return filepath.read_text(encoding="utf-8").strip() or default
         except Exception as exc:
             _LOGGING.error("Error reading %s: %s", filepath, exc)
             return default
@@ -756,21 +764,30 @@ class OSCompatibilityChecker:
     @classmethod
     def show_compatibility_dialog(cls, check_result: Dict[str, Any], logger: Logger) -> None:
         """Show compatibility dialog to user."""
-        if check_result["compatible"]:
-            if check_result["warnings"]:
-                QMessageBox.warning(
-                    None, "Compatibility Notice",
-                    f"{check_result['system']} detected with warnings:\n\n" +
-                    "\n".join(check_result["warnings"]) +
-                    "\n\nApplication will run but some features may be limited."
-                )
-        else:
-            error_msg = "System Compatibility Issues:\n\n" + "\n".join(f"• {error}" for error in check_result["errors"])
-            error_msg += "\nPlease update your system or install missing dependencies."
+        if not check_result.get("compatible", False):
+            errors = check_result.get("errors", [])
+            error_msg = (
+                "System Compatibility Issues:\n\n"
+                + "\n".join(f"• {error}" for error in errors)
+                + "\nPlease update your system or install missing dependencies."
+            )
             logger.log(error_msg)
-            reply = QMessageBox.critical(None, "Incompatible System", error_msg, QMessageBox.Ok | QMessageBox.Cancel)
+            reply = QMessageBox.critical(
+                None, "Incompatible System", error_msg, QMessageBox.Ok | QMessageBox.Cancel
+            )
             if reply == QMessageBox.Cancel:
                 sys.exit(1)
+            return
+
+        warnings = check_result.get("warnings", [])
+        if warnings:
+            QMessageBox.warning(
+                None,
+                "Compatibility Notice",
+                f"{check_result['system']} detected with warnings:\n\n"
+                + "\n".join(warnings)
+                + "\n\nApplication will run but some features may be limited.",
+            )
 
 class SingletonLock(QObject):
     """Manages singleton lock for single-instance enforcement."""
@@ -894,19 +911,57 @@ class SingletonLock(QObject):
         self.listener_thread = threading.Thread(target=listen, daemon=True)
         self.listener_thread.start()
 
+@dataclass(slots=True, frozen=True)
+class ReleaseInfo:
+    version: str
+    download_url: str
+    release_notes: str
+    prerelease: bool
+    success: bool
+    error: Optional[str] = None
+
+    @staticmethod
+    def failure(error: str) -> "ReleaseInfo":
+        return ReleaseInfo(
+            version=Config.DEFAULT_VERSION,
+            download_url="",
+            release_notes="",
+            prerelease=False,
+            success=False,
+            error=error,
+        )
+
 class VersionManager:
     """Manages application versioning and updates, including pre-release support."""
 
-    _LOCAL_VERSION_FILE = Path('VERSION.txt')
+    _LOCAL_VERSION_FILE: Final = Path("VERSION.txt")
+    _CACHE_TTL_DAYS: Final = 7
+
+    @staticmethod
+    def _read_version(path: Path, default: str | None = None) -> str | None:
+        """Internal helper to read a version file."""
+        try:
+            content = path.read_text(encoding="utf-8").strip()
+            return content if content else default
+        except FileNotFoundError:
+            return default
+        except Exception as e:
+            _LOGGING.warning("Failed to read %s: %s", path, e)
+            return default
+
+    @staticmethod
+    def _write_version(path: Path, version: str) -> None:
+        """Internal helper to write a version file."""
+        FileManager.write_file(path, version)
 
     @staticmethod
     def detect_local_version() -> str:
         """Detect version from local files or embedded info."""
-        version = FileManager.read_file(VersionManager._LOCAL_VERSION_FILE)
+        version = VersionManager._read_version(VersionManager._LOCAL_VERSION_FILE)
         if version:
-            FileManager.write_file(Config.VERSION_FILE, version)
+            VersionManager._write_version(Config.VERSION_FILE, version)
             return version
-        return FileManager.read_file(Config.VERSION_FILE, Config.DEFAULT_VERSION)
+        return VersionManager._read_version(Config.VERSION_FILE, Config.DEFAULT_VERSION) or Config.DEFAULT_VERSION
 
     @staticmethod
     def get_cached_latest() -> Optional[str]:
@@ -914,17 +969,17 @@ class VersionManager:
         try:
             if not Config.VERSION_CACHE_FILE.exists():
                 return None
-            content = Config.VERSION_CACHE_FILE.read_text(encoding='utf-8').strip().split('\n')
+            content = Config.VERSION_CACHE_FILE.read_text(encoding="utf-8").strip().splitlines()
             if len(content) < 2:
                 return None
             version, timestamp_str = content
             if version == Config.DEFAULT_VERSION:
                 return None
-            if (time.time() - int(timestamp_str)) / 86400 > 7:
+            if (time.time() - int(timestamp_str)) / 86400 > VersionManager._CACHE_TTL_DAYS:
                 return None
             return version
         except Exception as e:
-            Logger(None).log(f"Error reading version cache: {e}")
+            _LOGGING.warning("Failed to read version cache: %s", e)
             return None
 
     @staticmethod
@@ -935,49 +990,56 @@ class VersionManager:
     @staticmethod
     def fetch_latest_release(
         timeout: float = 10.0, include_prerelease: bool = False
-    ) -> Dict[str, Any]:
+    ) -> ReleaseInfo:
         """
         Fetch latest release info from GitHub.
         If include_prerelease is True, will consider pre-releases as candidates.
         """
         if not isinstance(timeout, (int, float)) or timeout <= 0:
-            return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': 'Invalid timeout value'}
+            return ReleaseInfo.failure("Invalid timeout value")
         if not Config.GITHUB_REPO:
-            return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': 'Missing GitHub repository configuration'}
+            return ReleaseInfo.failure("Missing GitHub repository configuration")
+
         try:
-            headers = {'Accept': 'application/vnd.github.v3+json', 'User-Agent': Config.APP_NAME}
-            # Fetch all releases to include pre-releases if requested
+            headers = {
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": Config.APP_NAME,
+            }
             url = f"https://api.github.com/repos/{Config.GITHUB_REPO}/releases"
             response = requests.get(url, headers=headers, timeout=timeout)
             response.raise_for_status()
             releases = response.json()
             if not isinstance(releases, list) or not releases:
-                return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': 'No releases found'}
+                return ReleaseInfo.failure("No releases found")
 
-            # Filter releases based on pre-release preference
             candidates = [
-                r for r in releases
-                if (include_prerelease or not r.get('prerelease', True)) and r.get('tag_name')
+                r
+                for r in releases
+                if (include_prerelease or not r.get("prerelease", True))
+                and r.get("tag_name")
             ]
             if not candidates:
-                return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': 'No suitable releases found'}
+                return ReleaseInfo.failure("No suitable releases found")
 
-            # Pick the first (latest) candidate
             latest = candidates[0]
-            tag_name = latest.get('tag_name', '').lstrip('v')
+            tag_name = latest.get("tag_name", "").lstrip("v")
             if not tag_name:
-                return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': 'No valid version found'}
-            return {
-                'version': tag_name,
-                'download_url': latest.get('html_url', f"https://github.com/{Config.GITHUB_REPO}/releases/latest"),
-                'release_notes': latest.get('body', 'No release notes available'),
-                'prerelease': latest.get('prerelease', False),
-                'success': True
-            }
+                return ReleaseInfo.failure("No valid version found")
+
+            return ReleaseInfo(
+                version=tag_name,
+                download_url=latest.get(
+                    "html_url",
+                    f"https://github.com/{Config.GITHUB_REPO}/releases/latest",
+                ),
+                release_notes=latest.get("body", "No release notes available"),
+                prerelease=latest.get("prerelease", False),
+                success=True,
+            )
         except (Timeout, ConnectionError, HTTPError, RequestException) as e:
-            return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': str(e)}
+            return ReleaseInfo.failure(str(e))
         except Exception as e:
-            return {'version': Config.DEFAULT_VERSION, 'success': False, 'error': f'Unexpected error: {str(e)}'}
+            return ReleaseInfo.failure(f"Unexpected error: {str(e)}")
 
     @staticmethod
     def get_current_version() -> str:
@@ -987,29 +1049,27 @@ class VersionManager:
             return version
         cached = VersionManager.get_cached_latest()
         if cached:
-            FileManager.write_file(Config.VERSION_FILE, cached)
+            VersionManager._write_version(Config.VERSION_FILE, cached)
             return cached
         release_info = VersionManager.fetch_latest_release()
-        if release_info.get('success'):
-            version = release_info['version']
+        if release_info.success:
+            version = release_info.version
             VersionManager.cache_latest_version(version)
-            FileManager.write_file(Config.VERSION_FILE, version)
+            VersionManager._write_version(Config.VERSION_FILE, version)
             return version
         return Config.DEFAULT_VERSION
 
     @staticmethod
     def is_newer_version(new: str, current: str) -> bool:
         """Compare semantic versions, including pre-release identifiers."""
-        def parse_version(v: str) -> tuple:
-            # Split into numeric and pre-release parts
-            parts = v.split('-', 1)
+        def parse_version(v: str) -> tuple[tuple[int, ...], str]:
+            parts = v.split("-", 1)
             numeric_part = parts[0]
-            prerelease_part = parts[1] if len(parts) > 1 else ''
-            # Parse numeric part
-            nums = [int(p) if p.isdigit() else 0 for p in numeric_part.split('.')[:3]]
+            prerelease_part = parts[1] if len(parts) > 1 else ""
+            nums = [int(p) if p.isdigit() else 0 for p in numeric_part.split(".")[:3]]
             nums += [0] * (3 - len(nums))
-            # Pre-release priority: empty string > any pre-release
             return (tuple(nums), prerelease_part)
+
         try:
             new_parsed = parse_version(new)
             current_parsed = parse_version(current)
@@ -1036,9 +1096,9 @@ class UpdateChecker(QThread):
             return
         self._logger.log("🔃 Starting update check...")
         release_info = VersionManager.fetch_latest_release(self._timeout)
-        latest_version = release_info.get('version', self._current_version)
+        latest_version = getattr(release_info, 'version', self._current_version)
         self.version_fetched.emit(latest_version)
-        if release_info.get('success'):
+        if release_info and getattr(release_info, 'success', False):
             if VersionManager.is_newer_version(latest_version, self._current_version):
                 self.update_available.emit(release_info)
                 self.check_completed.emit(True, f"Update available: v{latest_version}")
@@ -1631,6 +1691,56 @@ class AutoClickerApp(QMainWindow):
 
 class InstanceDialog(QDialog):
     """Premium-styled dialog for handling multiple instance detection."""
+
+    _DIALOG_CSS = """
+        QWidget#dialogFrame{
+            background-color:#1e1e2e;
+            border-radius:16px;
+            border:1px solid #333;
+        }
+    """
+
+    _TITLE_CSS = """
+        font-size:18px;
+        font-weight:600;
+        color:#ffffff;
+        letter-spacing:0.5px;
+    """
+
+    _CLOSE_BTN_CSS = """
+        QPushButton{
+            background-color:#2e2e3e;
+            color:#aaa;
+            border:none;
+            border-radius:14px;
+            font-weight:bold;
+            font-size:14px;
+        }
+        QPushButton:hover{background-color:#ff4757; color:#fff;}
+    """
+
+    _MSG_CSS = """
+        font-size:14px;
+        color:#c9c9d9;
+        line-height:22px;
+        padding:16px;
+        background-color:rgba(255,255,255,5);
+        border-radius:8px;
+    """
+
+    _BTN_CSS_TPL = """
+        QPushButton{{
+            background-color:{accent};
+            color:#ffffff;
+            border:none;
+            border-radius:8px;
+            font-weight:600;
+            font-size:14px;
+            padding:0 20px;
+        }}
+        QPushButton:hover{{background-color:{hover};}}
+    """
+
     def __init__(self, lockfile_path: Path, logger: Logger, parent=None):
         super().__init__(parent)
         self.lockfile_path = lockfile_path
@@ -1650,15 +1760,11 @@ class InstanceDialog(QDialog):
         """Assemble the premium dialog layout and widgets."""
         main = QVBoxLayout()
         main.setContentsMargins(0, 0, 0, 0)
+
         frame = QWidget()
         frame.setObjectName("dialogFrame")
-        frame.setStyleSheet("""
-            QWidget#dialogFrame{
-                background-color:#1e1e2e;
-                border-radius:16px;
-                border:1px solid #333;
-            }
-        """)
+        frame.setStyleSheet(self._DIALOG_CSS)
+
         lay = QVBoxLayout(frame)
         lay.setSpacing(12)
         lay.setContentsMargins(24, 24, 24, 24)
@@ -1666,37 +1772,27 @@ class InstanceDialog(QDialog):
         lay.addLayout(self._create_header())
         lay.addWidget(self._create_message())
         lay.addLayout(self._create_buttons())
+
         main.addWidget(frame)
         self.setLayout(main)
 
     def _create_header(self) -> QHBoxLayout:
         """Create the sleek header with icon and title."""
         lay = QHBoxLayout()
+
         icon = QLabel("🖱️")
         icon.setStyleSheet("font-size:28px; padding:0px;")
+
         title = QLabel("Already Running")
-        title.setStyleSheet("""
-            font-size:18px;
-            font-weight:600;
-            color:#ffffff;
-            letter-spacing:0.5px;
-        """)
-        lay.addWidget(icon)
-        lay.addWidget(title, 1)
+        title.setStyleSheet(self._TITLE_CSS)
+
         close = QPushButton("✕")
         close.setFixedSize(28, 28)
-        close.setStyleSheet("""
-            QPushButton{
-                background-color:#2e2e3e;
-                color:#aaa;
-                border:none;
-                border-radius:14px;
-                font-weight:bold;
-                font-size:14px;
-            }
-            QPushButton:hover{background-color:#ff4757; color:#fff;}
-        """)
+        close.setStyleSheet(self._CLOSE_BTN_CSS)
         close.clicked.connect(self.reject)
+
+        lay.addWidget(icon)
+        lay.addWidget(title, 1)
         lay.addWidget(close)
         return lay
 
@@ -1707,41 +1803,27 @@ class InstanceDialog(QDialog):
             "How would you like to proceed?"
         )
         lbl.setWordWrap(True)
-        lbl.setStyleSheet("""
-            font-size:14px;
-            color:#c9c9d9;
-            line-height:22px;
-            padding:16px;
-            background-color:rgba(255,255,255,5);
-            border-radius:8px;
-        """)
+        lbl.setStyleSheet(self._MSG_CSS)
         return lbl
 
     def _create_buttons(self) -> QHBoxLayout:
         """Create premium action buttons."""
         lay = QHBoxLayout()
         lay.setSpacing(12)
+
         self.force_btn = QPushButton("Force New Instance")
         self.exit_btn = QPushButton("Exit")
+
         for btn, accent, hover in (
             (self.force_btn, "#ff9800", "#e68900"),
             (self.exit_btn, "#f44336", "#da190b"),
         ):
             btn.setFixedHeight(42)
-            btn.setStyleSheet(f"""
-                QPushButton{{
-                    background-color:{accent};
-                    color:#ffffff;
-                    border:none;
-                    border-radius:8px;
-                    font-weight:600;
-                    font-size:14px;
-                    padding:0 20px;
-                }}
-                QPushButton:hover{{background-color:{hover};}}
-            """)
+            btn.setStyleSheet(self._BTN_CSS_TPL.format(accent=accent, hover=hover))
+
         self.exit_btn.clicked.connect(self.reject)
         self.force_btn.clicked.connect(self._on_force_new)
+
         lay.addWidget(self.force_btn)
         lay.addWidget(self.exit_btn)
         return lay
@@ -1772,29 +1854,138 @@ class InstanceDialog(QDialog):
         )
         if choice == QMessageBox.Yes:
             self.done(2)
+            
+class SplashScreen(QWidget):
+    """Frameless splash window with progress bar and version label."""
+
+    _STYLE = """
+        background-color: #2b2b2b;
+    """
+    _TITLE_STYLE = """
+        color: #ffffff;
+        font-size: 24px;
+        font-weight: bold;
+    """
+    _SUBTITLE_STYLE = """
+        color: #aaaaaa;
+        font-size: 12px;
+    """
+    _VERSION_STYLE = """
+        color: #666666;
+        font-size: 10px;
+    """
+    _PROGRESS_STYLE = """
+        QProgressBar {
+            background-color: #3c3c3c;
+            border-radius: 5px;
+            text-align: center;
+        }
+        QProgressBar::chunk {
+            background-color: #00aaff;
+            border-radius: 5px;
+        }
+    """
+
+    def __init__(self, timeout: int = 3000, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self._build_ui()
+        QTimer.singleShot(timeout, self.close)
+
+    # ------------------------------------------------------------------
+    # UI construction
+    # ------------------------------------------------------------------
+    def _build_ui(self) -> None:
+        self.setWindowTitle("Sigma Auto Clicker")
+        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setFixedSize(400, 250)
+        self.setStyleSheet(self._STYLE)
+        self._center_on_screen()
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        layout.addWidget(self._create_title(), alignment=Qt.AlignCenter)
+        layout.addSpacing(10)
+        layout.addWidget(self._create_subtitle(), alignment=Qt.AlignCenter)
+        layout.addSpacing(30)
+        layout.addWidget(self._create_progress(), alignment=Qt.AlignCenter)
+        layout.addSpacing(10)
+        layout.addWidget(self._create_version(), alignment=Qt.AlignCenter)
+
+    # ------------------------------------------------------------------
+    # Widget factories
+    # ------------------------------------------------------------------
+    def _create_title(self) -> QLabel:
+        lbl = QLabel("Sigma Auto Clicker")
+        lbl.setStyleSheet(self._TITLE_STYLE)
+        lbl.setAlignment(Qt.AlignCenter)
+        return lbl
+
+    def _create_subtitle(self) -> QLabel:
+        lbl = QLabel("Loading…")
+        lbl.setStyleSheet(self._SUBTITLE_STYLE)
+        lbl.setAlignment(Qt.AlignCenter)
+        return lbl
+
+    def _create_progress(self) -> QProgressBar:
+        bar = QProgressBar()
+        bar.setRange(0, 0)  # indeterminate
+        bar.setFixedWidth(300)
+        bar.setStyleSheet(self._PROGRESS_STYLE)
+        return bar
+
+    def _create_version(self) -> QLabel:
+        lbl = QLabel(f"v{Config.DEFAULT_VERSION}")
+        lbl.setStyleSheet(self._VERSION_STYLE)
+        lbl.setAlignment(Qt.AlignCenter)
+        return lbl
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    def _center_on_screen(self) -> None:
+        screen_geo = QApplication.primaryScreen().geometry()
+        self.move(screen_geo.center() - self.rect().center())
 
 class ApplicationLauncher:
-    """Handles application startup with singleton enforcement."""
+    """Orchestrates application startup with singleton enforcement."""
 
+    def __init__(self) -> None:
+        self.logger = self._setup_logger()
+
+    # ------------------------------------------------------------------
+    # Setup helpers
+    # ------------------------------------------------------------------
     @staticmethod
     def _setup_logger() -> Logger:
         FileManager.ensure_app_directory()
         return Logger(None)
 
+    # ------------------------------------------------------------------
+    # Compatibility & environment
+    # ------------------------------------------------------------------
     @staticmethod
     def _check_os_compatibility(logger: Logger) -> bool:
-        compat_result = OSCompatibilityChecker.check_compatibility(logger)
-        OSCompatibilityChecker.show_compatibility_dialog(compat_result, logger)
-        return compat_result["compatible"]
+        compat = OSCompatibilityChecker.check_compatibility(logger)
+        OSCompatibilityChecker.show_compatibility_dialog(compat, logger)
+        return compat["compatible"]
 
     @staticmethod
     def _build_qapplication() -> QApplication:
-        # Disable automatic DPI scaling and native dialogs for consistent behavior
-        # Override default DPI awareness to avoid "Access is denied" warnings on Windows
-        QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
-        # Explicitly set DPI awareness context via qt.conf-like environment variable
+        # Destroy any existing QApplication instance cleanly
+        if (existing := QApplication.instance()) is not None:
+            existing.quit()
+            existing.deleteLater()
+            QApplication.processEvents()
+            time.sleep(0.1)  # brief grace period
+
+        # Disable high-DPI scaling to avoid Windows permission warnings
         os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"
         os.environ["QT_WINDOWS_DPI_AWARENESS"] = "unaware"
+        QApplication.setHighDpiScaleFactorRoundingPolicy(
+            Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+        )
+
         app = QApplication(sys.argv)
         app.setQuitOnLastWindowClosed(False)
         app.setApplicationName(Config.APP_NAME)
@@ -1804,70 +1995,96 @@ class ApplicationLauncher:
     @staticmethod
     def _set_app_icon(app: QApplication, logger: Logger) -> None:
         try:
-            icon_path = FileManager.download_icon()
-            app.setWindowIcon(QIcon(icon_path))
-        except Exception as e:
-            logger.log(f"Failed to set app icon: {e}")
+            app.setWindowIcon(QIcon(FileManager.download_icon()))
+        except Exception as exc:
+            logger.log(f"Failed to set app icon: {exc}")
 
+    # ------------------------------------------------------------------
+    # Singleton & lifecycle
+    # ------------------------------------------------------------------
     @staticmethod
     def _handle_singleton_lock(logger: Logger) -> SingletonLock:
         lock = SingletonLock(logger=logger)
         acquired = lock.acquire_lock()
-        if acquired is None:
-            dialog = InstanceDialog(lock.lockfile_path, logger)
-            result = dialog.exec()
-            if result == QDialog.Accepted:
-                if lock.activate_existing():
-                    logger.log("Activated existing instance")
-                    sys.exit(0)
-                else:
-                    QMessageBox.critical(None, "❌ Error", "Could not activate existing instance.")
-                    sys.exit(1)
-            elif result == 2:
-                lock.release_lock()
-                if lock.lockfile_path.exists():
-                    try:
-                        lock.lockfile_path.unlink()
-                    except Exception as e:
-                        QMessageBox.warning(None, "⚠️ Warning", f"Could not delete lock file: {e}")
-                acquired = lock.acquire_lock()
-                if acquired is None:
-                    QMessageBox.critical(None, "❌ Error", "Could not create new instance.")
-                    sys.exit(1)
-                logger.log("Forced new instance created")
-            else:
+        if acquired is not None:
+            return lock
+
+        # Lock not acquired → show dialog
+        dialog = InstanceDialog(lock.lockfile_path, logger)
+        result = dialog.exec()
+
+        if result == QDialog.Accepted:
+            if lock.activate_existing():
+                logger.log("Activated existing instance")
                 sys.exit(0)
-        return lock
+            QMessageBox.critical(None, "❌ Error", "Could not activate existing instance.")
+            sys.exit(1)
+
+        if result == 2:  # Force new instance
+            lock.release_lock()
+            with contextlib.suppress(Exception):
+                lock.lockfile_path.unlink()
+
+            acquired = lock.acquire_lock()
+            if acquired is None:
+                QMessageBox.critical(None, "❌ Error", "Could not create new instance.")
+                sys.exit(1)
+            logger.log("Forced new instance created")
+            return lock
+
+        sys.exit(0)
 
     @staticmethod
     def _run_main_app(app: QApplication, lock: SingletonLock, logger: Logger) -> None:
+        splash = SplashScreen()
+        splash.show()
+        app.processEvents()  # ensure splash paints immediately
+
+        # Create main window after splash is shown but before closing it
         try:
-            window = AutoClickerApp(lock)
-            window.show()
+            main_window = AutoClickerApp(lock)
+        except Exception as exc:
+            logger.log(f"Application error during initialization: {exc}")
+            splash.close()
+            lock.release_lock()
+            sys.exit(1)
+
+        # Close splash after 3 seconds and show main window
+        QTimer.singleShot(3000, lambda: (splash.close(), main_window.show()))
+
+        try:
             sys.exit(app.exec())
-        except Exception as e:
-            logger.log(f"Application error: {e}")
+        except Exception as exc:
+            logger.log(f"Application runtime error: {exc}")
             sys.exit(1)
         finally:
             lock.release_lock()
 
-    @staticmethod
-    def run() -> None:
-        """Main application entry point."""
-        logger = ApplicationLauncher._setup_logger()
-        if not ApplicationLauncher._check_os_compatibility(logger):
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+    def run(self) -> None:
+        if not self._check_os_compatibility(self.logger):
             sys.exit(1)
 
-        app = ApplicationLauncher._build_qapplication()
-        ApplicationLauncher._set_app_icon(app, logger)
+        app = self._build_qapplication()
+        self._set_app_icon(app, self.logger)
+        lock = self._handle_singleton_lock(self.logger)
+        self._run_main_app(app, lock, self.logger)
         
-        lock = ApplicationLauncher._handle_singleton_lock(logger)
-        ApplicationLauncher._run_main_app(app, lock, logger)
+class AppLauncher:
+    """Thin wrapper to start the application."""
+
+    def __init__(self) -> None:
+        self.logger = Logger()
+
+    def run(self) -> None:
+        try:
+            self.logger.log("Application started")
+            ApplicationLauncher().run()
+        except Exception as exc:
+            self.logger.log(f"Application error: {exc}")
+            sys.exit(1)
 
 if __name__ == "__main__":
-    try:
-        Launcher = ApplicationLauncher()
-        Launcher.run()
-    except Exception as e:
-        logger.log(f"Application error: {e}")
-        sys.exit(1)
+    AppLauncher().run()
