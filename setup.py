@@ -20,7 +20,6 @@ try:
 except Exception:
     logger = _FallbackLogger.Log
 
-
 class PyInstallerBuilder:
     """Manages the build process for creating executables using PyInstaller."""
 
@@ -64,43 +63,6 @@ class PyInstallerBuilder:
         return f"{self.app_name} (v{version})" if version else self.app_name
 
     def _build_pyinstaller_args(self) -> List[str]:
-        def _collect_required_imports() -> List[str]:
-            """
-            Discover all top-level packages/modules that are *not* installed
-            in the current environment and therefore must be explicitly
-            hidden-imported so PyInstaller bundles them.
-            """
-            # 1. Build a set of everything that is importable from site-packages
-            try:
-                installed_dists = {d.metadata["Name"].lower() for d in distributions()}
-            except ImportError:
-                # fallback for Python < 3.8
-                installed_dists = {d.project_name.lower() for d in pkg_resources.working_set}
-
-            # Also add standard-library modules (they are always available)
-            stdlib_names = {
-                "sys", "platform", "threading", "subprocess", "urllib", "webbrowser",
-                "socket", "os", "random", "re", "importlib", "typing", "pathlib",
-                "shutil", "time", "pkg_resources"
-            }
-
-            # 2. Walk through the project folder and collect every Python file
-            project_root = Path(__file__).resolve().parent
-            local_modules = set()
-            for py_file in project_root.rglob("*.py"):
-                if py_file.name.startswith("__"):
-                    continue
-                relative = py_file.relative_to(project_root).with_suffix("")
-                dotted = str(relative).replace(os.sep, ".")
-                local_modules.add(dotted.split(".")[0])  # top-level only
-
-            # 3. Filter out what is already satisfied (installed or stdlib)
-            required = [
-                mod for mod in local_modules
-                if mod.lower() not in installed_dists and mod not in stdlib_names
-            ]
-            return required
-
         return [
             self.script_file,
             "--noconfirm",
@@ -112,6 +74,7 @@ class PyInstallerBuilder:
             "--optimize=2",
             f"--add-data={self.icon_path};src/icons/",
             f"--add-data={self.version_file};.",
+            f"--add-data=Sigma-Auto-Clicker-Py/;.",
             "--collect-submodules=Sigma-Auto-Clicker-Py/",
             "--log-level=WARN",
         ]
@@ -122,7 +85,6 @@ class PyInstallerBuilder:
         if not os.path.exists(path):
             self.logger("info", f"'{path}' directory not found — skipping.")
             return
-
         self.logger("info", f"Removing '{path}' directory...")
         try:
             shutil.rmtree(path, ignore_errors=True)
@@ -133,7 +95,6 @@ class PyInstallerBuilder:
     def _remove_file(self, file_path: str) -> bool:
         if not os.path.exists(file_path):
             return False
-
         self.logger("info", f"Removing '{file_path}'...")
         try:
             os.remove(file_path)
@@ -213,7 +174,6 @@ class PyInstallerBuilder:
         except Exception as exc:
             self.logger("error", f"Build process failed: {exc}")
             self._exit_script(cleanup_delay)
-
 
 if __name__ == "__main__":
     PyBuilder = PyInstallerBuilder()

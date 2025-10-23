@@ -1,4 +1,3 @@
-import logging as _logging
 import sys
 import time
 import platform
@@ -15,8 +14,7 @@ import os
 import random
 import re
 import time
-# from pypresence import Presence
-from dotenv import load_dotenv
+import logging as _logging
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass
@@ -1532,60 +1530,6 @@ class InstanceDialog(QDialog):
         if choice == QMessageBox.Yes:
             self.done(2)
 
-# try:
-#     _PYPRESENCE_AVAILABLE = True
-# except ImportError:
-#     _PYPRESENCE_AVAILABLE = False
-#     Presence = None
-
-# class DiscordRPC:
-#     """Cross-platform Discord Rich Presence wrapper using pypresence."""
-
-#     load_dotenv()
-#     CLIENT_ID: Final[str] = os.getenv("DISCORD_CLIENT_ID") or ""
-
-#     def __init__(self) -> None:
-#         self._rpc: Optional[Presence] = None
-
-#     def connect(self) -> bool:
-#         if not _PYPRESENCE_AVAILABLE:
-#             _LOGGING.info("Discord RPC skipped: pypresence not installed")
-#             return False
-#         if not self.CLIENT_ID:
-#             _LOGGING.warning("Discord RPC skipped: DISCORD_CLIENT_ID not set")
-#             return False
-#         try:
-#             self._rpc = Presence(self.CLIENT_ID)
-#             self._rpc.connect()
-#             _LOGGING.info("Discord RPC connected")
-#             return True
-#         except Exception as e:
-#             _LOGGING.warning("Discord RPC connect failed: %s", e)
-#             return False
-
-#     def update_presence(self) -> None:
-#         if self._rpc is None:
-#             return
-#         version = FileManager.read_file(Config.VERSION_FILE, Config.DEFAULT_VERSION) or Config.DEFAULT_VERSION
-#         try:
-#             self._rpc.update(
-#                 state="Clicking away!",
-#                 details=f"{Config.APP_NAME} (v{version})",
-#                 start=int(time.time()),
-#                 large_image="app_icon",
-#                 large_text=Config.APP_NAME
-#             )
-#         except Exception as e:
-#             _LOGGING.warning("Discord RPC update failed: %s", e)
-
-#     def close(self) -> None:
-#         if self._rpc is not None:
-#             try:
-#                 self._rpc.close()
-#             except Exception:
-#                 pass
-#             self._rpc = None
-
 class ApplicationLauncher:
     """Handles application startup with singleton enforcement."""
 
@@ -1642,17 +1586,6 @@ class ApplicationLauncher:
 
         sys.exit(0)
 
-    # def _start_rpc(self) -> None:
-    #     try:
-    #         discord_rpc = DiscordRPC()
-    #         if not discord_rpc.connect():
-    #             sys.exit(1)
-    #         discord_rpc.update_presence()
-    #         self.logger.log("Discord Rich Presence started.")
-    #     except Exception as e:
-    #         self.logger.log(f"RPC error: {e}")
-    #         sys.exit(1)
-
     def run(self) -> None:
         if not self._check_os_compatibility():
             sys.exit(1)
@@ -1665,7 +1598,6 @@ class ApplicationLauncher:
             sys.exit(1)
 
         try:
-            # self._start_rpc()
             window = AutoClickerApp(lock)
             window.show()
             sys.exit(app.exec())
