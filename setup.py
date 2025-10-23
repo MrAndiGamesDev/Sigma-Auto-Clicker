@@ -2,11 +2,8 @@ import os
 import shutil
 import sys
 import subprocess
-import pkg_resources
 from time import sleep
 from typing import Optional, List
-from pathlib import Path
-from importlib.metadata import distributions
 
 # Fallback logger if CustomLogging import fails
 class _FallbackLogger:
@@ -63,7 +60,7 @@ class PyInstallerBuilder:
         return f"{self.app_name} (v{version})" if version else self.app_name
 
     def _build_pyinstaller_args(self) -> List[str]:
-        return [
+        args = [
             self.script_file,
             "--noconfirm",
             "--noconsole",
@@ -78,6 +75,8 @@ class PyInstallerBuilder:
             "--collect-submodules=Sigma-Auto-Clicker-Py/",
             "--log-level=WARN",
         ]
+        return args
+
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------

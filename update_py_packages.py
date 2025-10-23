@@ -1,9 +1,9 @@
 import subprocess
 import sys
+import json
 from typing import List
 from time import sleep
 from src.Packages.CustomLogging import Logging
-import json
 
 class PackageUpdater:
     """Manages updating outdated Python packages using pip."""

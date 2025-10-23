@@ -15,6 +15,7 @@ build/
 develop-eggs/
 dist/
 downloads/
+linux_binary
 Sigma-Auto-Clicker-Py/
 sigma_temp/
 Releases/

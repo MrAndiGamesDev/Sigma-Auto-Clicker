@@ -10,5 +10,4 @@ dotenv
 psutil
 pynput
 autopep8
-pypresence
 dotenv

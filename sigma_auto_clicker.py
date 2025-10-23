@@ -128,6 +128,14 @@ class Config(metaclass=_MetaConfig):
     # --- Update history --------------------------------------------------------
     UPDATE_LOGS: Final[List[UpdateLogEntry]] = [
         UpdateLogEntry(
+            date="2025-10-24",
+            version="1.1.3",
+            description=(
+                "Discord Rich Presence (Currently broken) removed from a code. "
+                "Fixed Logging UI Bug. "
+            ),
+        ),
+        UpdateLogEntry(
             date="2025-10-22",
             version="1.1.2-beta.1",
             description=(
