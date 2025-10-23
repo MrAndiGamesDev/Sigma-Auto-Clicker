@@ -295,8 +295,21 @@ class Config(metaclass=_MetaConfig):
 
     @staticmethod
     def save_admin_mode(admin_mode: bool) -> None:
-        """Persist the admin-mode flag to disk."""
-        FileManager.write_file(Config.ADMIN_MODE_FILE, str(admin_mode).lower())
+        """Persist the admin-mode flag to disk with permission repair."""
+        try:
+            FileManager.write_file(Config.ADMIN_MODE_FILE, str(admin_mode).lower())
+        except PermissionError:
+            # Attempt to repair permissions on parent directory and retry once
+            try:
+                os.chmod(Config.ADMIN_MODE_FILE.parent, 0o700)
+                if Config.ADMIN_MODE_FILE.exists():
+                    os.chmod(Config.ADMIN_MODE_FILE, 0o600)
+                else:
+                    Config.ADMIN_MODE_FILE.touch(mode=0o600, exist_ok=True)
+                FileManager.write_file(Config.ADMIN_MODE_FILE, str(admin_mode).lower())
+            except Exception as repair_exc:
+                _LOGGING.error("Failed to repair permissions for admin-mode file: %s", repair_exc)
+                raise
 
 class FileManager:
     """Handles file operations and persistence."""
