@@ -94,8 +94,8 @@ class PyInstallerBuilder:
             f"--add-data={self.icon_path};src/icons/",
             f"--add-data={self.version_file};.",
             f"--collect-submodules={self.config.collect_modules}",
-            "--distpath=dist/Sigma-Auto-Clicker",
-            "--workpath=build/Sigma-Auto-Clicker",
+            "--distpath=dist",
+            "--workpath=dist/Sigma-Auto-Clicker",
             "--log-level=WARN",
         ]
         self.logger.Log("debug", f"PyInstaller arguments built: {args}")
