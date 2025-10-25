@@ -203,5 +203,5 @@ class PyInstallerBuilder:
             self._exit_script(cleanup_delay)
 
 if __name__ == "__main__":
-    builder = PyInstallerBuilder(None)
+    builder = PyInstallerBuilder()
     builder.run()
