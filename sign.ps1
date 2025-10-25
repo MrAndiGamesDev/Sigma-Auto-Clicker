@@ -67,7 +67,7 @@ function Get-PfxPassword {
 $CertPath   = "certificate.pfx"
 $AuthorName = "MrAndi Scripted LLC"
 $Version    = Get-Content VERSION.txt
-$Executable = "Sigma Auto Clicker (v$Version).exe"
+$Executable = "dist\Sigma Auto Clicker (v$Version).exe"
 #endregion
 
 # Early exit if PFX already present
@@ -141,7 +141,7 @@ SET "CERT_FILE=certificate.pfx"
 SET "TIMESTAMP_SERVER=http://timestamp.digicert.com"
 SET "SIGN_ALGORITHM=sha256"
 SET /P VERSION=<VERSION.txt
-SET "FILE_TO_SIGN=Sigma Auto Clicker (v%VERSION%).exe"
+SET "FILE_TO_SIGN=dist\Sigma Auto Clicker (v%VERSION%).exe"
 SET "ENV_FILE=.env"
 SET "PASSWORD_KEY=PFX_PASSWORD"
 
