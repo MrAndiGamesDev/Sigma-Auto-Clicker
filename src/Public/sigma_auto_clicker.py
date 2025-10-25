@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, Final
+from requests.exceptions import RequestException, HTTPError, ConnectionError, Timeout
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QLineEdit, QPushButton,
     QTabWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTextEdit, QGraphicsDropShadowEffect,
@@ -27,7 +28,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QIcon, QAction
 from PySide6.QtCore import Qt, QTimer, QThread, Signal as pyqtSignal, QObject
-from requests.exceptions import RequestException, HTTPError, ConnectionError, Timeout
 
 _LOGGING: Final = _logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class UpdateLogEntry:
     version: str
     description: str
 
-    def to_bullets(self, bullet: str = "•") -> str:
+    def to_bullets(self, bullet: str = "•", separator: str = "\n") -> str:
         """Return a bullet-point representation of the description."""
         desc = self.description.strip()
         points = [p.strip() for p in desc.split(". ") if p.strip()]
@@ -68,7 +68,7 @@ class UpdateLogEntry:
             points.append("Various additional improvements")
         if not points:
             points = ["No details provided."]
-        return "\n".join(f"  {bullet} {p}" for p in points)
+        return separator.join(f"  {bullet} {p}" for p in points)
 
 class _MetaConfig(type):
     """Metaclass that turns the namespace into read-only class attributes."""
@@ -92,7 +92,7 @@ class Config(metaclass=_MetaConfig):
     # Defaults
     # ------------------------------------------------------------------
     DEFAULT_VERSION: Final[str] = "1.0.0"
-    DEFAULT_THEME: Final[str] = "Dark"
+    DEFAULT_THEME: Final[str] = "Light"
     DEFAULT_COLOR: Final[str] = "Blue"
     DEFAULT_ADMIN_MODE: Final[bool] = False
     DEFAULT_SETTINGS: Final[Dict[str, str]] = {
@@ -299,27 +299,30 @@ class Config(metaclass=_MetaConfig):
     def load_admin_mode() -> bool:
         """Return the admin-mode flag stored on disk or the default."""
         content = FileManager.read_file(Config.ADMIN_MODE_FILE)
-        if content is None:
-            return Config.DEFAULT_ADMIN_MODE
-        return (content.lower() == "true")
+        return content.lower() == "true" if content is not None else Config.DEFAULT_ADMIN_MODE
 
     @staticmethod
     def save_admin_mode(admin_mode: bool) -> None:
         """Persist the admin-mode flag to disk with permission repair."""
+        content = str(admin_mode).lower()
         try:
-            FileManager.write_file(Config.ADMIN_MODE_FILE, str(admin_mode).lower())
+            FileManager.write_file(Config.ADMIN_MODE_FILE, content)
         except PermissionError:
-            # Attempt to repair permissions on parent directory and retry once
-            try:
-                os.chmod(Config.ADMIN_MODE_FILE.parent, 0o700)
-                if Config.ADMIN_MODE_FILE.exists():
-                    os.chmod(Config.ADMIN_MODE_FILE, 0o600)
-                else:
-                    Config.ADMIN_MODE_FILE.touch(mode=0o600, exist_ok=True)
-                FileManager.write_file(Config.ADMIN_MODE_FILE, str(admin_mode).lower())
-            except Exception as repair_exc:
-                _LOGGING.error("Failed to repair permissions for admin-mode file: %s", repair_exc)
-                raise
+            Config._repair_admin_file_permissions()
+            FileManager.write_file(Config.ADMIN_MODE_FILE, content)
+
+    @staticmethod
+    def _repair_admin_file_permissions() -> None:
+        """Repair permissions for the admin-mode file and its parent directory."""
+        try:
+            os.chmod(Config.ADMIN_MODE_FILE.parent, 0o700)
+            if Config.ADMIN_MODE_FILE.exists():
+                os.chmod(Config.ADMIN_MODE_FILE, 0o600)
+            else:
+                Config.ADMIN_MODE_FILE.touch(mode=0o600, exist_ok=True)
+        except Exception as repair_exc:
+            _LOGGING.error("Failed to repair permissions for admin-mode file: %s", repair_exc)
+            raise
 
 class FileManager:
     """Handles file operations and persistence."""
@@ -628,7 +631,8 @@ class ThemeManager:
                 r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
             ) as key:
                 value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-                return "Light" if value else "Dark"
+                detect_system = "Light" if value else "Dark"
+                return detect_system
         except Exception:
             return Config.DEFAULT_THEME
 
@@ -636,7 +640,7 @@ class OSCompatibilityChecker:
     """Checks OS compatibility and requirements."""
     SUPPORTED_PLATFORMS: Final[Dict[str, Dict[str, Any]]] = {
         "Windows": {
-            "min_version": "10",
+            "min_version": "11",
             "required_libs": ("pyautogui", "keyboard", "requests", "PySide6", "psutil"),
             "system_tray": True,
             "hotkeys": True,
@@ -1379,7 +1383,7 @@ class SystemTrayManager:
             return action
 
         add("👁️ Show", self.parent.show_normal)
-        add(f"▶️ Start/Stop ({self.parent.hotkey_manager.current_hotkey})",self.parent.toggle_clicking)
+        add(f"▶️ Start/Stop ({self.parent.hotkey_manager.current_hotkey})", self.parent.toggle_clicking)
         add(f"{'🔓 Disable' if self.parent.is_admin_mode else '🔒 Enable'} Admin Mode", self.parent.toggle_admin_mode)
         add("🔄 Check Updates", self.parent.check_for_updates)
 
@@ -1392,7 +1396,7 @@ class SystemTrayManager:
     # ------------------------------------------------------------------
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         """Handle left-click / double-click on the tray icon."""
-        if reason in (QSystemTrayIcon.ActivationReason.Trigger,QSystemTrayIcon.ActivationReason.DoubleClick):
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
             self.parent.show_normal()
 
 class ClickerEngine:
@@ -1871,7 +1875,7 @@ class SplashScreen(QWidget):
     """
     _VERSION_STYLE = """
         color: #666666;
-        font-size: 10px;
+        font-size: 21px;
     """
     _PROGRESS_STYLE = """
         QProgressBar {
@@ -1894,7 +1898,7 @@ class SplashScreen(QWidget):
     # UI construction
     # ------------------------------------------------------------------
     def _build_ui(self) -> None:
-        self.setWindowTitle("Sigma Auto Clicker")
+        self.setWindowTitle(Config.APP_NAME)
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setFixedSize(400, 250)
         self.setStyleSheet(self._STYLE)
@@ -1915,15 +1919,28 @@ class SplashScreen(QWidget):
     # Widget factories
     # ------------------------------------------------------------------
     def _create_title(self) -> QLabel:
-        lbl = QLabel("Sigma Auto Clicker")
+        lbl = QLabel(Config.APP_NAME)
         lbl.setStyleSheet(self._TITLE_STYLE)
         lbl.setAlignment(Qt.AlignCenter)
         return lbl
 
     def _create_subtitle(self) -> QLabel:
-        lbl = QLabel("Loading…")
+        lbl = QLabel("Loading")
         lbl.setStyleSheet(self._SUBTITLE_STYLE)
         lbl.setAlignment(Qt.AlignCenter)
+
+        # Animated moving dots
+        self._dots = 0
+        self._base_text = "Loading"
+
+        def animate():
+            self._dots = ((self._dots + 1) % 4)
+            lbl.setText(self._base_text + "." * self._dots + " " * (3 - self._dots))
+
+        self._subtitle_timer = QTimer(lbl)
+        self._subtitle_timer.timeout.connect(animate)
+        self._subtitle_timer.start(350)
+
         return lbl
 
     def _create_progress(self) -> QProgressBar:
@@ -1934,7 +1951,8 @@ class SplashScreen(QWidget):
         return bar
 
     def _create_version(self) -> QLabel:
-        lbl = QLabel(f"v{Config.DEFAULT_VERSION}")
+        version = FileManager.read_file(Config.VERSION_FILE, Config.DEFAULT_VERSION)
+        lbl = QLabel(f"v{version}")
         lbl.setStyleSheet(self._VERSION_STYLE)
         lbl.setAlignment(Qt.AlignCenter)
         return lbl
@@ -1979,8 +1997,6 @@ class ApplicationLauncher:
             time.sleep(0.1)  # brief grace period
 
         # Disable high-DPI scaling to avoid Windows permission warnings
-        os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"
-        os.environ["QT_WINDOWS_DPI_AWARENESS"] = "unaware"
         QApplication.setHighDpiScaleFactorRoundingPolicy(
             Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
         )
@@ -2083,8 +2099,8 @@ class AppLauncher:
     # ------------------------------------------------------------------
     def start(self) -> None:
         try:
-            self._app.run()
             self._log.info("Application started")
+            self._app.run()
         except Exception as exc:
             self._log.error(f"Application error: {exc}")
             sys.exit(1)
