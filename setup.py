@@ -2,8 +2,8 @@ import shutil
 import sys
 import subprocess
 from time import sleep
-from typing import Optional, List, Dict, Any
-from dataclasses import dataclass, field
+from typing import Optional, List
+from dataclasses import dataclass
 from pathlib import Path
 
 @dataclass
@@ -47,6 +47,9 @@ class PyInstallerBuilder:
         self.config = Config()
         self.script_file = Path(script_file or (sys.argv[1] if len(sys.argv) > 1 else "run.py"))
         self.logger.enable_debug(self.config.debug_mode or enable_debug)
+        self.icon_path = self.config.icon_path
+        self.version_file = self.config.version_file
+
         self._validate_script_file()
         self.pyinstaller_args = self._build_pyinstaller_args()
 
@@ -89,7 +92,9 @@ class PyInstallerBuilder:
             "--optimize=2",
             f"--add-data={self.icon_path};src/icons/",
             f"--add-data={self.version_file};.",
-            "--collect-submodules=Sigma-Auto-Clicker-Py/",
+            f"--collect-submodules={self.config.collect_modules}",
+            "--distpath=dist/Sigma-Auto-Clicker",
+            "--workpath=build/Sigma-Auto-Clicker",
             "--log-level=WARN",
         ]
         self.logger.Log("debug", f"PyInstaller arguments built: {args}")
@@ -198,8 +203,5 @@ class PyInstallerBuilder:
             self._exit_script(cleanup_delay)
 
 if __name__ == "__main__":
-    enable_debug = "--debug" in sys.argv
-    if enable_debug:
-        sys.argv.remove("--debug")
-    builder = PyInstallerBuilder(enable_debug=enable_debug)
+    builder = PyInstallerBuilder(None)
     builder.run()
