@@ -6,8 +6,8 @@ PySide6
 PyInstaller
 colorama
 requests
-dotenv
 psutil
 pynput
 autopep8
 dotenv
+pypresence

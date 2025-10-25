@@ -1,39 +1,52 @@
-import os
 import shutil
 import sys
 import subprocess
 from time import sleep
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
+from dataclasses import dataclass, field
+from pathlib import Path
 
-# Fallback logger if CustomLogging import fails
+@dataclass
+class Config:
+    optimization_lvl: int = 2
+    app_name: str = "Sigma Auto Clicker"
+    version_file: str = "VERSION.txt"
+    collect_modules: str = "Sigma-Auto-Clicker-Py/"
+    icon_path: str = "src/icons/mousepointer.ico"
+    debug_mode: bool = True
+
 class _FallbackLogger:
     @staticmethod
-    def Log(level: str, message: str) -> None:
-        print(f"[{level.upper()}] {message}")
+    def Log(level: str, message: str) -> str:
+        return f"[{level.upper()}] {message}"
+
+class _DebugLogger:
+    def __init__(self, base_logger):
+        self.base_logger = base_logger
+        self.debug_enabled = False
+
+    def enable_debug(self, can_debug: bool) -> None:
+        self.debug_enabled = can_debug
+
+    def Log(self, level: str, message: str) -> str:
+        if self.debug_enabled or level.lower() != "debug":
+            return self.base_logger(level, message)
+        return ""
 
 try:
     from src.Packages.CustomLogging import Logging
-    logger = Logging.Log
+    logger = _DebugLogger(Logging.Log)
 except Exception:
-    logger = _FallbackLogger.Log
+    logger = _DebugLogger(_FallbackLogger.Log)
 
 class PyInstallerBuilder:
     """Manages the build process for creating executables using PyInstaller."""
 
-    def __init__(self, script_file: Optional[str] = None):
-        """
-        Initialize the PyInstallerBuilder with script file and configuration.
-
-        Args:
-            script_file (Optional[str]): Path to the main script file to build.
-                Defaults to sys.argv[1] or 'sigma_auto_clicker.py'.
-        """
+    def __init__(self, script_file: Optional[str] = None, enable_debug: bool = False):
         self.logger = logger
-        self.script_file = script_file or (sys.argv[1] if len(sys.argv) > 1 else "sigma_auto_clicker.py")
-        self.app_name = "Sigma Auto Clicker"
-        self.version_file = "VERSION.txt"
-        self.icon_path = "src/icons/mousepointer.ico"
-
+        self.config = Config()
+        self.script_file = Path(script_file or (sys.argv[1] if len(sys.argv) > 1 else "run.py"))
+        self.logger.enable_debug(self.config.debug_mode or enable_debug)
         self._validate_script_file()
         self.pyinstaller_args = self._build_pyinstaller_args()
 
@@ -41,30 +54,35 @@ class PyInstallerBuilder:
     # Internal helpers
     # ------------------------------------------------------------------
     def _validate_script_file(self) -> None:
-        if not os.path.exists(self.script_file):
-            self.logger("error", f"Script file '{self.script_file}' not found.")
+        self.logger.Log("debug", f"Validating script file: {self.script_file}")
+        if not self.script_file.exists():
+            self.logger.Log("error", f"Script file '{self.script_file}' not found.")
             self._exit_script()
 
     def _load_version(self) -> str:
+        self.logger.Log("debug", f"Loading version from: {self.config.version_file}")
         try:
-            if os.path.exists(self.version_file):
-                with open(self.version_file, encoding="utf-8") as fh:
-                    return fh.read().strip()
-            self.logger("warning", f"Version file '{self.version_file}' not found.")
+            version_path = Path(self.config.version_file)
+            if version_path.exists():
+                version = version_path.read_text(encoding="utf-8").strip()
+                self.logger.Log("debug", f"Version loaded: {version}")
+                return version
+            self.logger.Log("warning", f"Version file '{self.config.version_file}' not found.")
         except Exception as exc:
-            self.logger("warning", f"Failed to load version from '{self.version_file}': {exc}")
+            self.logger.Log("warning", f"Failed to load version from '{self.config.version_file}': {exc}")
         return ""
 
     def _get_executable_name(self) -> str:
         version = self._load_version()
-        return f"{self.app_name} (v{version})" if version else self.app_name
+        name = f"{self.config.app_name} (v{version})" if version else self.config.app_name
+        self.logger.Log("debug", f"Executable name determined: {name}")
+        return name
 
     def _build_pyinstaller_args(self) -> List[str]:
         args = [
-            self.script_file,
+            str(self.script_file),
             "--noconfirm",
             "--noconsole",
-            "-F",
             "--clean",
             f"--name={self._get_executable_name()}",
             f"--icon={self.icon_path}",
@@ -74,48 +92,54 @@ class PyInstallerBuilder:
             "--collect-submodules=Sigma-Auto-Clicker-Py/",
             "--log-level=WARN",
         ]
+        self.logger.Log("debug", f"PyInstaller arguments built: {args}")
         return args
 
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
-    def _remove_directory(self, path: str) -> None:
-        if not os.path.exists(path):
-            self.logger("info", f"'{path}' directory not found — skipping.")
+    def _remove_directory(self, path: Path) -> None:
+        self.logger.Log("debug", f"Attempting to remove directory: {path}")
+        if not path.exists():
+            self.logger.Log("info", f"'{path}' directory not found — skipping.")
             return
-        self.logger("info", f"Removing '{path}' directory...")
+        self.logger.Log("info", f"Removing '{path}' directory...")
         try:
             shutil.rmtree(path, ignore_errors=True)
-            self.logger("success", f"'{path}' directory removed successfully.")
+            self.logger.Log("success", f"'{path}' directory removed successfully.")
         except Exception as exc:
-            self.logger("warning", f"Failed to remove '{path}': {exc}")
+            self.logger.Log("warning", f"Failed to remove '{path}': {exc}")
 
-    def _remove_file(self, file_path: str) -> bool:
-        if not os.path.exists(file_path):
+    def _remove_file(self, file_path: Path) -> bool:
+        self.logger.Log("debug", f"Attempting to remove file: {file_path}")
+        if not file_path.exists():
             return False
-        self.logger("info", f"Removing '{file_path}'...")
+        self.logger.Log("info", f"Removing '{file_path}'...")
         try:
-            os.remove(file_path)
-            self.logger("success", f"'{file_path}' removed successfully.")
+            file_path.unlink()
+            self.logger.Log("success", f"'{file_path}' removed successfully.")
             return True
         except Exception as exc:
-            self.logger("warning", f"Failed to remove '{file_path}': {exc}")
+            self.logger.Log("warning", f"Failed to remove '{file_path}': {exc}")
             return False
 
     def cleanup_dirs(self) -> None:
-        for folder in ("build", "dist"):
+        self.logger.Log("debug", "Starting cleanup of directories and spec files")
+        for folder in (Path("build"), Path("dist")):
             self._remove_directory(folder)
 
-        base_name = os.path.splitext(self.script_file)[0]
+        base_name = self.script_file.stem
         possible_specs = [
-            f"{base_name}.spec",
-            "Sigma_Auto_Clicker.spec",
-            "SigmaAutoClicker.spec",
-            self._get_executable_name()
-            .replace(" ", "_")
-            .replace("(", "")
-            .replace(")", "")
-            + ".spec",
+            Path(f"{base_name}.spec"),
+            Path("Sigma_Auto_Clicker.spec"),
+            Path("SigmaAutoClicker.spec"),
+            Path(
+                self._get_executable_name()
+                .replace(" ", "_")
+                .replace("(", "")
+                .replace(")", "")
+                + ".spec"
+            ),
         ]
 
         removed = 0
@@ -123,56 +147,59 @@ class PyInstallerBuilder:
             if self._remove_file(spec):
                 removed += 1
 
-        for entry in os.listdir("."):
-            if entry.endswith(".spec") and entry not in possible_specs:
+        for entry in Path(".").glob("*.spec"):
+            if entry not in possible_specs:
                 if self._remove_file(entry):
                     removed += 1
 
         if not removed:
-            self.logger("info", "No .spec files found to remove.")
+            self.logger.Log("info", "No .spec files found to remove.")
 
     # ------------------------------------------------------------------
     # Build
     # ------------------------------------------------------------------
     def build_executable(self) -> None:
-        self.logger("info", f"Building executable for '{self.script_file}'...")
+        self.logger.Log("info", f"Building executable for '{self.script_file}'...")
         try:
-            self.logger(
+            self.logger.Log(
                 "info", "Running PyInstaller with arguments: " + " ".join(self.pyinstaller_args)
             )
-            # Use subprocess to ensure the build runs in a fresh interpreter
             cmd = [sys.executable, "-m", "PyInstaller"] + self.pyinstaller_args
+            self.logger.Log("debug", f"Executing command: {cmd}")
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
-                self.logger("error", f"PyInstaller build failed:\n{result.stderr}")
+                self.logger.Log("error", f"PyInstaller build failed:\n{result.stderr}")
                 self._exit_script(2)
-            self.logger(
+            self.logger.Log(
                 "success",
                 f"Executable '{self._get_executable_name()}' built successfully in 'dist' folder.",
             )
         except Exception as exc:
-            self.logger("error", f"PyInstaller build failed: {exc}")
+            self.logger.Log("error", f"PyInstaller build failed: {exc}")
             self._exit_script(2)
 
     # ------------------------------------------------------------------
     # Flow control
     # ------------------------------------------------------------------
-    def _exit_script(self, duration: int = 1, exit_code: int = 1) -> None:
-        self.logger("info", "Exiting script.")
+    def _exit_script(self, duration: float = 1.0, exit_code: int = 1) -> None:
+        self.logger.Log("info", "Exiting script.")
         sleep(duration)
         sys.exit(exit_code)
 
     def run(self, cleanup_delay: float = 0.5) -> None:
-        self.logger("info", f"Starting build process for '{self.script_file}'...")
+        self.logger.Log("info", f"Starting build process for '{self.script_file}'...")
         try:
             self.cleanup_dirs()
             sleep(cleanup_delay)
             self.build_executable()
-            self.logger("success", "Build process completed successfully.")
+            self.logger.Log("success", "Build process completed successfully.")
         except Exception as exc:
-            self.logger("error", f"Build process failed: {exc}")
+            self.logger.Log("error", f"Build process failed: {exc}")
             self._exit_script(cleanup_delay)
 
 if __name__ == "__main__":
-    PyBuilder = PyInstallerBuilder()
-    PyBuilder.run()
+    enable_debug = "--debug" in sys.argv
+    if enable_debug:
+        sys.argv.remove("--debug")
+    builder = PyInstallerBuilder(enable_debug=enable_debug)
+    builder.run()
