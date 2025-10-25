@@ -13,7 +13,7 @@ class Config:
     version_file: str = "VERSION.txt"
     collect_modules: str = "Sigma-Auto-Clicker-Py/"
     icon_path: str = "src/icons/mousepointer.ico"
-    debug_mode: bool = True
+    debug_mode: bool = False
 
 class _FallbackLogger:
     @staticmethod
@@ -87,6 +87,7 @@ class PyInstallerBuilder:
             str(self.script_file),
             "--noconfirm",
             "--noconsole",
+            "--onefile",
             "--clean",
             f"--name={self._get_executable_name()}",
             f"--icon={self.icon_path}",
@@ -202,5 +203,5 @@ class PyInstallerBuilder:
             self._exit_script(cleanup_delay)
 
 if __name__ == "__main__":
-    builder = PyInstallerBuilder()
-    builder.run()
+    PyConverter = PyInstallerBuilder()
+    PyConverter.run()
