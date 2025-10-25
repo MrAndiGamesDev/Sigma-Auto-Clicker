@@ -47,6 +47,7 @@ class PyInstallerBuilder:
         self.config = Config()
         self.script_file = Path(script_file or (sys.argv[1] if len(sys.argv) > 1 else "run.py"))
         self.logger.enable_debug(self.config.debug_mode or enable_debug)
+        self.optimization_lvl = self.config.optimization_lvl
         self.icon_path = self.config.icon_path
         self.version_file = self.config.version_file
 
@@ -89,7 +90,7 @@ class PyInstallerBuilder:
             "--clean",
             f"--name={self._get_executable_name()}",
             f"--icon={self.icon_path}",
-            "--optimize=2",
+            f"--optimize={self.config.optimization_lvl}",
             f"--add-data={self.icon_path};src/icons/",
             f"--add-data={self.version_file};.",
             f"--collect-submodules={self.config.collect_modules}",
