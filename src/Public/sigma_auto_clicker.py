@@ -85,7 +85,7 @@ class Config(metaclass=_MetaConfig):
     AUTHORNAME: Final[str] = "MrAndiGamesDev"
     GITHUB_REPO: Final[str] = f"{AUTHORNAME}/Sigma-Auto-Clicker"
     ICON_URL: Final[str] = (
-        f"https://raw.githubusercontent.com/{AUTHORNAME}/My-App-Icons/main/mousepointer.ico"
+        f"https://raw.githubusercontent.com/{GITHUB_REPO}/refs/heads/stable/src/icons/mousepointer.ico"
     )
 
     # ------------------------------------------------------------------
@@ -144,7 +144,7 @@ class Config(metaclass=_MetaConfig):
     # ------------------------------------------------------------------
     UPDATE_LOGS: Final[List[UpdateLogEntry]] = [
         UpdateLogEntry(
-            date="2025-10-24",
+            date="2025-10-25",
             version="1.1.3",
             description=(
                 "Removed Discord Rich Presence to trim dependencies and speed up startup. "
@@ -162,6 +162,7 @@ class Config(metaclass=_MetaConfig):
                 "Bundled updated SSL certificates to prevent update-check failures on older systems. "
                 "Performed code-wide linting and type-hint coverage for maintainability. "
                 "Added a splashscreen when opening an app (Not Animated on an executable file atm). "
+                "and so much more! "
             ),
         ),
         UpdateLogEntry(
@@ -259,11 +260,7 @@ class Config(metaclass=_MetaConfig):
     # Public helpers
     # ------------------------------------------------------------------
     @staticmethod
-    def format_update_logs(
-        separator: str = "\n\n",
-        logger: Optional[Logger] = None,
-        bullet: str = "•",
-    ) -> str:
+    def format_update_logs(separator: Optional[str] = "\n\n", logger: Optional[Logger] = None, bullet: str = "•") -> str:
         """Return a formatted string with the update history."""
         logger = logger or Logger(None)
         if not Config.UPDATE_LOGS:
@@ -278,9 +275,10 @@ class Config(metaclass=_MetaConfig):
             logger.log(f"⚠️ Error formatting update logs: {e}")
             return "No valid update logs available."
 
-        footer = "=" * 50
-        header = f"🖱️ {Config.APP_NAME} Update History 🖱️\n{footer}\n"
-        return f"{header}{separator.join(entries)}\n{footer}\n"
+        footer = "=" * 60
+        formated_text = f"\n{footer}\n"
+        header = f"🖱️ {Config.APP_NAME} Update History 🖱️{formated_text}"
+        return f"{header}{separator.join(entries)}{formated_text}"
 
     # ------------------------------------------------------------------
     # Persistence helpers
@@ -288,12 +286,12 @@ class Config(metaclass=_MetaConfig):
     @staticmethod
     def load_hotkey() -> str:
         """Return the hotkey stored on disk or the default."""
-        return FileManager.read_file(Config.HOTKEY_FILE, Config.HOTKEY) or Config.HOTKEY
+        return (FileManager.read_file(Config.HOTKEY_FILE, Config.HOTKEY) or Config.HOTKEY)
 
     @staticmethod
     def save_hotkey(hotkey: str) -> None:
         """Persist the given hotkey to disk."""
-        FileManager.write_file(Config.HOTKEY_FILE, hotkey.strip())
+        return FileManager.write_file(Config.HOTKEY_FILE, hotkey.strip())
 
     @staticmethod
     def load_admin_mode() -> bool:
@@ -301,7 +299,7 @@ class Config(metaclass=_MetaConfig):
         content = FileManager.read_file(Config.ADMIN_MODE_FILE)
         if content is None:
             return Config.DEFAULT_ADMIN_MODE
-        return content.lower() == "true"
+        return (content.lower() == "true")
 
     @staticmethod
     def save_admin_mode(admin_mode: bool) -> None:
@@ -330,7 +328,6 @@ class FileManager:
         Config.APPDATA_DIR.mkdir(parents=True, exist_ok=True)
         if Config.SYSTEM != "Windows":
             return
-
         paths_to_hide = (
             Config.APPDATA_DIR,
             Config.HOTKEY_FILE,
@@ -355,7 +352,6 @@ class FileManager:
         FileManager.ensure_app_directory()
         if Config.APP_ICON.exists():
             return str(Config.APP_ICON)
-
         try:
             urllib.request.urlretrieve(Config.ICON_URL, Config.APP_ICON)
         except Exception as exc:
@@ -428,17 +424,13 @@ class HotkeyManager:
                 return False
             main_key = keys[-1]
             modifiers = keys[:-1]
-            if not (
-                main_key.isalnum()
-                or main_key in keyboard.all_modifiers
-                or len(main_key) == 1
-            ):
+            if not (main_key.isalnum() or main_key in keyboard.all_modifiers or len(main_key) == 1):
                 return False
             return all(mod in self._VALID_MODIFIERS for mod in modifiers)
         except Exception:
             return False
 
-    def update_hotkey(self, new_hotkey: str, callback: callable) -> bool:
+    def update_hotkey(self, new_hotkey: str, callback: Final[callable]) -> bool:
         """Update the current hotkey."""
         if not new_hotkey:
             self.logger.log("❌ No hotkey provided")
@@ -555,13 +547,7 @@ class ThemeManager:
     # Public API
     # ------------------------------------------------------------------
     @classmethod
-    def apply_theme(
-        cls,
-        widget: QWidget,
-        appearance: str,
-        color_theme: str,
-        logger: Optional[Logger] = None
-    ) -> None:
+    def apply_theme(cls, widget: QWidget, appearance: str, color_theme: str, logger: Optional[Logger] = None) -> None:
         """Apply base theme and button palette to a widget tree."""
         logger = logger or Logger(None)
         appearance = appearance if appearance in cls.BASE_STYLES else Config.DEFAULT_THEME
@@ -629,10 +615,10 @@ class ThemeManager:
             return Config.DEFAULT_THEME
         try:
             import winreg
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-            ) as key:
+            Microsoft_key = r"Software\Microsoft"
+            Microsoft_CurrentVersion = r"Windows\CurrentVersion"
+            Microsoft_Registry_Key = rf"{Microsoft_key}\{Microsoft_CurrentVersion}\Themes\Personalize"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,Microsoft_Registry_Key) as key:
                 value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
                 return "Light" if value else "Dark"
         except Exception:
@@ -642,8 +628,8 @@ class OSCompatibilityChecker:
     """Checks OS compatibility and requirements."""
     SUPPORTED_PLATFORMS: Final[Dict[str, Dict[str, Any]]] = {
         "Windows": {
-            "min_version": "10",
-            "required_libs": ("pyautogui", "keyboard", "requests", "PySide6", "psutil"),
+            "min_version": "11",
+            "required_libs": ("pyautogui", "keyboard", "requests", "PySide6", "psutil", "platform", "subprocess", "urllib", "webbrowser", "socket", "os", "random", "re", "contextlib", "logging", "datetime", "pathlib", "dataclasses", "typing"),
             "system_tray": True,
             "hotkeys": True,
             "pyautogui": True,
@@ -692,10 +678,11 @@ class OSCompatibilityChecker:
         return result
 
     @staticmethod
-    def _check_version(system: str, release: str, min_version: Optional[str]) -> bool:
+    def _check_version(system: str, release: Optional[str] = None, min_version: Optional[str] = None) -> List[bool]:
         """Check if OS version meets minimum requirements."""
         try:
-            if system == "Windows" and hasattr(sys, 'getwindowsversion'):
+            Is_Windows = system == "Windows" and hasattr(sys, 'getwindowsversion')
+            if Is_Windows:
                 win_ver = sys.getwindowsversion()
                 return (win_ver.major > 10) or (win_ver.major == 10 and win_ver.minor >= 0)
             return True
@@ -740,7 +727,8 @@ class OSCompatibilityChecker:
                     return False
                 return True
         except Exception as e:
-            Logger(None).log(f"Failed to request admin privileges: {e}")
+            logger = Logger(None)
+            logger.log(f"Failed to request admin privileges: {e}")
             return False
 
     @staticmethod
@@ -758,7 +746,9 @@ class OSCompatibilityChecker:
         try:
             cpu_percent = psutil.cpu_percent(interval=0.1)
             memory = psutil.virtual_memory()
-            return cpu_percent <= 90 and memory.available >= 512 * 1024 * 1024
+            cpu_available = cpu_percent <= 90
+            memory_available = memory.available >= 512 * 1024 * 1024
+            return (cpu_available and memory_available)
         except:
             return True
 
@@ -893,7 +883,7 @@ class SingletonLock(QObject):
             self.logger.log(f"Failed to bind to port {self.lock_port}: {e}")
             return None
 
-    def _start_listener(self) -> None:
+    def _start_listener(self) -> Optional[socket.socket]:
         """Start listener thread for activation requests."""
         def listen():
             while self._running and self.socket:
@@ -922,7 +912,7 @@ class ReleaseInfo:
     error: Optional[str] = None
 
     @staticmethod
-    def failure(error: str) -> "ReleaseInfo":
+    def failure(error: Final[str]) -> "ReleaseInfo":
         return ReleaseInfo(
             version=Config.DEFAULT_VERSION,
             download_url="",
@@ -2032,7 +2022,6 @@ class ApplicationLauncher:
                 sys.exit(1)
             logger.log("Forced new instance created")
             return lock
-
         sys.exit(0)
 
     @staticmethod
@@ -2070,22 +2059,24 @@ class ApplicationLauncher:
 
         app = self._build_qapplication()
         self._set_app_icon(app, self.logger)
+
         lock = self._handle_singleton_lock(self.logger)
         self._run_main_app(app, lock, self.logger)
-        
+
 class AppLauncher:
     """Thin wrapper to start the application."""
 
     def __init__(self) -> None:
-        self.logger = Logger()
+        self._app = ApplicationLauncher()
+        self._log = _LOGGING
 
-    def run(self) -> None:
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+    def start(self) -> None:
         try:
-            self.logger.log("Application started")
-            ApplicationLauncher().run()
+            self._app.run()
+            self._log.info("Application started")
         except Exception as exc:
-            self.logger.log(f"Application error: {exc}")
+            self._log.error(f"Application error: {exc}")
             sys.exit(1)
-
-if __name__ == "__main__":
-    AppLauncher().run()

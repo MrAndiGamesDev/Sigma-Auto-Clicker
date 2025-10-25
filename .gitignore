@@ -8,6 +8,7 @@ __pycache__/
 
 # Ingnores Vs Code
 .vscode/
+.vs/
 
 # Distribution / packaging
 .Python
@@ -15,6 +16,8 @@ build/
 develop-eggs/
 dist/
 downloads/
+run.build/
+run.dist/
 linux_binary
 Sigma-Auto-Clicker-Py/
 sigma_temp/
