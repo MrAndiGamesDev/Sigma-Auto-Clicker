@@ -141,7 +141,7 @@ SET "CERT_FILE=certificate.pfx"
 SET "TIMESTAMP_SERVER=http://timestamp.digicert.com"
 SET "SIGN_ALGORITHM=sha256"
 SET /P VERSION=<VERSION.txt
-SET "FILE_TO_SIGN=dist\Sigma Auto Clicker (v%VERSION%).exe"
+SET "FILE_TO_SIGN=Sigma Auto Clicker (v%VERSION%).exe"
 SET "ENV_FILE=.env"
 SET "PASSWORD_KEY=PFX_PASSWORD"
 
