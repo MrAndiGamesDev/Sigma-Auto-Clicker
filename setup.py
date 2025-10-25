@@ -1,31 +1,31 @@
-import os
 import shutil
 import sys
 import subprocess
 from time import sleep
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
+from dataclasses import dataclass, field
+from pathlib import Path
 
+@dataclass
 class Config:
-    optmization_lvl = 2
-    app_name = "Sigma Auto Clicker"
-    version_file = "VERSION.txt"
-    collect_modules = "Sigma-Auto-Clicker-Py/"
-    icon_path = "src/icons/mousepointer.ico"
-    debug_mode = True
+    optimization_lvl: int = 2
+    app_name: str = "Sigma Auto Clicker"
+    version_file: str = "VERSION.txt"
+    collect_modules: str = "Sigma-Auto-Clicker-Py/"
+    icon_path: str = "src/icons/mousepointer.ico"
+    debug_mode: bool = True
 
-# Fallback logger if CustomLogging import fails
 class _FallbackLogger:
     @staticmethod
     def Log(level: str, message: str) -> str:
         return f"[{level.upper()}] {message}"
 
-# Debugging logger wrapper
 class _DebugLogger:
     def __init__(self, base_logger):
         self.base_logger = base_logger
         self.debug_enabled = False
 
-    def enable_debug(self, can_debug: bool):
+    def enable_debug(self, can_debug: bool) -> None:
         self.debug_enabled = can_debug
 
     def Log(self, level: str, message: str) -> str:
@@ -42,27 +42,11 @@ except Exception:
 class PyInstallerBuilder:
     """Manages the build process for creating executables using PyInstaller."""
 
-    # ------------------------------------------------------------------
-    # Initialize helpers
-    # ------------------------------------------------------------------
     def __init__(self, script_file: Optional[str] = None, enable_debug: bool = False):
-        """
-        Initialize the PyInstallerBuilder with script file and configuration.
-
-        Args:
-            script_file (Optional[str]): Path to the main script file to build.
-                Defaults to sys.argv[1] or 'run.py'.
-            enable_debug (bool): Enable debug logging.
-        """
         self.logger = logger
-        self.script_file = script_file or (sys.argv[1] if len(sys.argv) > 1 else "run.py")
-        self.optmization_lvl = Config.optmization_lvl
-        self.app_name = Config.app_name
-        self.version_file = Config.version_file
-        self.collect_modules = Config.collect_modules
-        self.icon_path = Config.icon_path
-
-        self.logger.enable_debug(Config.debug_mode)
+        self.config = Config()
+        self.script_file = Path(script_file or (sys.argv[1] if len(sys.argv) > 1 else "run.py"))
+        self.logger.enable_debug(self.config.debug_mode or enable_debug)
         self._validate_script_file()
         self.pyinstaller_args = self._build_pyinstaller_args()
 
@@ -71,41 +55,41 @@ class PyInstallerBuilder:
     # ------------------------------------------------------------------
     def _validate_script_file(self) -> None:
         self.logger.Log("debug", f"Validating script file: {self.script_file}")
-        if not os.path.exists(self.script_file):
+        if not self.script_file.exists():
             self.logger.Log("error", f"Script file '{self.script_file}' not found.")
             self._exit_script()
 
     def _load_version(self) -> str:
-        self.logger.Log("debug", f"Loading version from: {self.version_file}")
+        self.logger.Log("debug", f"Loading version from: {self.config.version_file}")
         try:
-            if os.path.exists(self.version_file):
-                with open(self.version_file, encoding="utf-8") as fh:
-                    version = fh.read().strip()
-                    self.logger.Log("debug", f"Version loaded: {version}")
-                    return version
-            self.logger.Log("warning", f"Version file '{self.version_file}' not found.")
+            version_path = Path(self.config.version_file)
+            if version_path.exists():
+                version = version_path.read_text(encoding="utf-8").strip()
+                self.logger.Log("debug", f"Version loaded: {version}")
+                return version
+            self.logger.Log("warning", f"Version file '{self.config.version_file}' not found.")
         except Exception as exc:
-            self.logger.Log("warning", f"Failed to load version from '{self.version_file}': {exc}")
+            self.logger.Log("warning", f"Failed to load version from '{self.config.version_file}': {exc}")
         return ""
 
     def _get_executable_name(self) -> str:
         version = self._load_version()
-        name = f"{self.app_name} (v{version})" if version else self.app_name
+        name = f"{self.config.app_name} (v{version})" if version else self.config.app_name
         self.logger.Log("debug", f"Executable name determined: {name}")
         return name
 
     def _build_pyinstaller_args(self) -> List[str]:
         args = [
-            self.script_file,
+            str(self.script_file),
             "--noconfirm",
             "--noconsole",
             "--clean",
             f"--name={self._get_executable_name()}",
-            f"--icon={self.icon_path}",
-            f"--optimize={self.optmization_lvl}",
-            f"--add-data={self.icon_path};src/icons/",
-            f"--add-data={self.version_file};.",
-            f"--collect-submodules={self.collect_modules}",
+            f"--icon={self.config.icon_path}",
+            f"--optimize={self.config.optimization_lvl}",
+            f"--add-data={self.config.icon_path};src/icons/",
+            f"--add-data={self.config.version_file};.",
+            f"--collect-submodules={self.config.collect_modules}",
         ]
         self.logger.Log("debug", f"PyInstaller arguments built: {args}")
         return args
@@ -113,9 +97,9 @@ class PyInstallerBuilder:
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
-    def _remove_directory(self, path: str) -> None:
+    def _remove_directory(self, path: Path) -> None:
         self.logger.Log("debug", f"Attempting to remove directory: {path}")
-        if not os.path.exists(path):
+        if not path.exists():
             self.logger.Log("info", f"'{path}' directory not found — skipping.")
             return
         self.logger.Log("info", f"Removing '{path}' directory...")
@@ -125,13 +109,13 @@ class PyInstallerBuilder:
         except Exception as exc:
             self.logger.Log("warning", f"Failed to remove '{path}': {exc}")
 
-    def _remove_file(self, file_path: str) -> bool:
+    def _remove_file(self, file_path: Path) -> bool:
         self.logger.Log("debug", f"Attempting to remove file: {file_path}")
-        if not os.path.exists(file_path):
+        if not file_path.exists():
             return False
         self.logger.Log("info", f"Removing '{file_path}'...")
         try:
-            os.remove(file_path)
+            file_path.unlink()
             self.logger.Log("success", f"'{file_path}' removed successfully.")
             return True
         except Exception as exc:
@@ -140,19 +124,21 @@ class PyInstallerBuilder:
 
     def cleanup_dirs(self) -> None:
         self.logger.Log("debug", "Starting cleanup of directories and spec files")
-        for folder in ("build", "dist"):
+        for folder in (Path("build"), Path("dist")):
             self._remove_directory(folder)
 
-        base_name = os.path.splitext(self.script_file)[0]
+        base_name = self.script_file.stem
         possible_specs = [
-            f"{base_name}.spec",
-            "Sigma_Auto_Clicker.spec",
-            "SigmaAutoClicker.spec",
-            self._get_executable_name()
-            .replace(" ", "_")
-            .replace("(", "")
-            .replace(")", "")
-            + ".spec",
+            Path(f"{base_name}.spec"),
+            Path("Sigma_Auto_Clicker.spec"),
+            Path("SigmaAutoClicker.spec"),
+            Path(
+                self._get_executable_name()
+                .replace(" ", "_")
+                .replace("(", "")
+                .replace(")", "")
+                + ".spec"
+            ),
         ]
 
         removed = 0
@@ -160,8 +146,8 @@ class PyInstallerBuilder:
             if self._remove_file(spec):
                 removed += 1
 
-        for entry in os.listdir("."):
-            if entry.endswith(".spec") and entry not in possible_specs:
+        for entry in Path(".").glob("*.spec"):
+            if entry not in possible_specs:
                 if self._remove_file(entry):
                     removed += 1
 
@@ -177,8 +163,7 @@ class PyInstallerBuilder:
             self.logger.Log(
                 "info", "Running PyInstaller with arguments: " + " ".join(self.pyinstaller_args)
             )
-            # Use subprocess to ensure the build runs in a fresh interpreter
-            cmd = ([sys.executable, "-m", "PyInstaller"] + self.pyinstaller_args)
+            cmd = [sys.executable, "-m", "PyInstaller"] + self.pyinstaller_args
             self.logger.Log("debug", f"Executing command: {cmd}")
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
@@ -195,7 +180,7 @@ class PyInstallerBuilder:
     # ------------------------------------------------------------------
     # Flow control
     # ------------------------------------------------------------------
-    def _exit_script(self, duration: Optional[int] = 1, exit_code: Optional[int] = 1) -> None:
+    def _exit_script(self, duration: float = 1.0, exit_code: int = 1) -> None:
         self.logger.Log("info", "Exiting script.")
         sleep(duration)
         sys.exit(exit_code)
@@ -212,9 +197,8 @@ class PyInstallerBuilder:
             self._exit_script(cleanup_delay)
 
 if __name__ == "__main__":
-    # Enable debug logging if --debug flag is provided
     enable_debug = "--debug" in sys.argv
     if enable_debug:
         sys.argv.remove("--debug")
-    PyBuilder = PyInstallerBuilder(enable_debug=enable_debug)
-    PyBuilder.run()
+    builder = PyInstallerBuilder(enable_debug=enable_debug)
+    builder.run()
