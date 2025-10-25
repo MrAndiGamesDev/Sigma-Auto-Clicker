@@ -162,7 +162,6 @@ class Config(metaclass=_MetaConfig):
                 "Bundled updated SSL certificates to prevent update-check failures on older systems. "
                 "Performed code-wide linting and type-hint coverage for maintainability. "
                 "Added a splashscreen when opening an app (Not Animated on an executable file atm). "
-                "and so much more! "
             ),
         ),
         UpdateLogEntry(
@@ -260,7 +259,11 @@ class Config(metaclass=_MetaConfig):
     # Public helpers
     # ------------------------------------------------------------------
     @staticmethod
-    def format_update_logs(separator: Optional[str] = "\n\n", logger: Optional[Logger] = None, bullet: str = "•") -> str:
+    def format_update_logs(
+        separator: str = "\n\n",
+        logger: Optional[Logger] = None,
+        bullet: str = "•",
+    ) -> str:
         """Return a formatted string with the update history."""
         logger = logger or Logger(None)
         if not Config.UPDATE_LOGS:
@@ -275,10 +278,9 @@ class Config(metaclass=_MetaConfig):
             logger.log(f"⚠️ Error formatting update logs: {e}")
             return "No valid update logs available."
 
-        footer = "=" * 60
-        formated_text = f"\n{footer}\n"
-        header = f"🖱️ {Config.APP_NAME} Update History 🖱️{formated_text}"
-        return f"{header}{separator.join(entries)}{formated_text}"
+        footer = "=" * 50
+        header = f"🖱️ {Config.APP_NAME} Update History 🖱️\n{footer}\n"
+        return f"{header}{separator.join(entries)}\n{footer}\n"
 
     # ------------------------------------------------------------------
     # Persistence helpers
@@ -547,7 +549,13 @@ class ThemeManager:
     # Public API
     # ------------------------------------------------------------------
     @classmethod
-    def apply_theme(cls, widget: QWidget, appearance: str, color_theme: str, logger: Optional[Logger] = None) -> None:
+    def apply_theme(
+        cls,
+        widget: QWidget,
+        appearance: str,
+        color_theme: str,
+        logger: Optional[Logger] = None
+    ) -> None:
         """Apply base theme and button palette to a widget tree."""
         logger = logger or Logger(None)
         appearance = appearance if appearance in cls.BASE_STYLES else Config.DEFAULT_THEME
@@ -615,10 +623,10 @@ class ThemeManager:
             return Config.DEFAULT_THEME
         try:
             import winreg
-            Microsoft_key = r"Software\Microsoft"
-            Microsoft_CurrentVersion = r"Windows\CurrentVersion"
-            Microsoft_Registry_Key = rf"{Microsoft_key}\{Microsoft_CurrentVersion}\Themes\Personalize"
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,Microsoft_Registry_Key) as key:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+            ) as key:
                 value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
                 return "Light" if value else "Dark"
         except Exception:
@@ -628,8 +636,8 @@ class OSCompatibilityChecker:
     """Checks OS compatibility and requirements."""
     SUPPORTED_PLATFORMS: Final[Dict[str, Dict[str, Any]]] = {
         "Windows": {
-            "min_version": "11",
-            "required_libs": ("pyautogui", "keyboard", "requests", "PySide6", "psutil", "platform", "subprocess", "urllib", "webbrowser", "socket", "os", "random", "re", "contextlib", "logging", "datetime", "pathlib", "dataclasses", "typing"),
+            "min_version": "10",
+            "required_libs": ("pyautogui", "keyboard", "requests", "PySide6", "psutil"),
             "system_tray": True,
             "hotkeys": True,
             "pyautogui": True,
@@ -912,7 +920,7 @@ class ReleaseInfo:
     error: Optional[str] = None
 
     @staticmethod
-    def failure(error: Final[str]) -> "ReleaseInfo":
+    def failure(error: str) -> "ReleaseInfo":
         return ReleaseInfo(
             version=Config.DEFAULT_VERSION,
             download_url="",

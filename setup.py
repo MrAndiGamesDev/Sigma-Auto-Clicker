@@ -85,11 +85,12 @@ class PyInstallerBuilder:
             "--noconsole",
             "--clean",
             f"--name={self._get_executable_name()}",
-            f"--icon={self.config.icon_path}",
-            f"--optimize={self.config.optimization_lvl}",
-            f"--add-data={self.config.icon_path};src/icons/",
-            f"--add-data={self.config.version_file};.",
-            f"--collect-submodules={self.config.collect_modules}",
+            f"--icon={self.icon_path}",
+            "--optimize=2",
+            f"--add-data={self.icon_path};src/icons/",
+            f"--add-data={self.version_file};.",
+            "--collect-submodules=Sigma-Auto-Clicker-Py/",
+            "--log-level=WARN",
         ]
         self.logger.Log("debug", f"PyInstaller arguments built: {args}")
         return args
