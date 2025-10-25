@@ -67,7 +67,7 @@ function Get-PfxPassword {
 $CertPath   = "certificate.pfx"
 $AuthorName = "MrAndi Scripted LLC"
 $Version    = Get-Content VERSION.txt
-$Executable = "dist\Sigma Auto Clicker (v$Version).exe"
+$Executable = "Sigma Auto Clicker (v$Version).exe"
 #endregion
 
 # Early exit if PFX already present
