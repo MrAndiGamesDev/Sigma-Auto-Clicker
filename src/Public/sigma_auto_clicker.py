@@ -24,14 +24,13 @@ from requests.exceptions import RequestException, HTTPError, ConnectionError, Ti
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QLineEdit, QPushButton,
     QTabWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTextEdit, QGraphicsDropShadowEffect,
-    QComboBox, QSystemTrayIcon, QMenu, QFormLayout, QMessageBox, QDialog, QProgressBar
+    QComboBox, QSystemTrayIcon, QMenu, QFormLayout, QMessageBox, QDialog, QProgressBar, QCheckBox
 )
 from PySide6.QtGui import QIcon, QAction
 from PySide6.QtCore import Qt, QTimer, QThread, Signal as pyqtSignal, QObject
 
 _LOGGING: Final = _logging.getLogger(__name__)
 
-# PyAutoGUI settings
 try:
     pyautogui.PAUSE = 0
     pyautogui.FAILSAFE = False
@@ -93,8 +92,7 @@ class Config(metaclass=_MetaConfig):
     # ------------------------------------------------------------------
     DEFAULT_VERSION: Final[str] = "1.0.0"
     DEFAULT_THEME: Final[str] = "Light"
-    DEFAULT_COLOR: Final[str] = "Blue"
-    DEFAULT_ADMIN_MODE: Final[bool] = False
+    DEFAULT_COLOR: Final[str] = "Purple"
     DEFAULT_SETTINGS: Final[Dict[str, str]] = {
         "click_count": "1",
         "loop_count": "0",
@@ -123,7 +121,7 @@ class Config(metaclass=_MetaConfig):
     APPDATA_DIR: Final[Path] = (
         HOME_DIR / "AppData" / "Roaming" / "SigmaAutoClicker"
         if SYSTEM == "Windows"
-        else HOME_DIR / ".sigma_autoclicker"
+        else HOME_DIR / "sigma_auto_clicker"
     )
 
     # ------------------------------------------------------------------
@@ -136,7 +134,6 @@ class Config(metaclass=_MetaConfig):
     VERSION_FILE: Final[Path] = APPDATA_DIR / "current_version.txt"
     VERSION_CACHE_FILE: Final[Path] = APPDATA_DIR / "version_cache.txt"
     LOCK_FILE: Final[Path] = APPDATA_DIR / f"app.lock.{LOCK_PORT}"
-    ADMIN_MODE_FILE: Final[Path] = APPDATA_DIR / "admin_mode.txt"
 
     # ------------------------------------------------------------------
     # Update history
@@ -161,6 +158,9 @@ class Config(metaclass=_MetaConfig):
                 "Bundled updated SSL certificates to prevent update-check failures on older systems. "
                 "Performed code-wide linting and type-hint coverage for maintainability. "
                 "Added a splashscreen when opening an app (Not Animated on an executable file atm). "
+                "Added a killswitch (emergency stop). "
+                "Removed Admin Mode due to the lack of bugs. "
+                "Added Always On Top Switch Toggle. "
             ),
         ),
         UpdateLogEntry(
@@ -258,11 +258,7 @@ class Config(metaclass=_MetaConfig):
     # Public helpers
     # ------------------------------------------------------------------
     @staticmethod
-    def format_update_logs(
-        separator: str = "\n\n",
-        logger: Optional[Logger] = None,
-        bullet: str = "•",
-    ) -> str:
+    def format_update_logs(separator: str = "\n\n", logger: Optional[Logger] = None, bullet: str = "•") -> str:
         """Return a formatted string with the update history."""
         logger = logger or Logger(None)
         if not Config.UPDATE_LOGS:
@@ -294,35 +290,6 @@ class Config(metaclass=_MetaConfig):
         """Persist the given hotkey to disk."""
         return FileManager.write_file(Config.HOTKEY_FILE, hotkey.strip())
 
-    @staticmethod
-    def load_admin_mode() -> bool:
-        """Return the admin-mode flag stored on disk or the default."""
-        content = FileManager.read_file(Config.ADMIN_MODE_FILE)
-        return content.lower() == "true" if content is not None else Config.DEFAULT_ADMIN_MODE
-
-    @staticmethod
-    def save_admin_mode(admin_mode: bool) -> None:
-        """Persist the admin-mode flag to disk with permission repair."""
-        content = str(admin_mode).lower()
-        try:
-            FileManager.write_file(Config.ADMIN_MODE_FILE, content)
-        except PermissionError:
-            Config._repair_admin_file_permissions()
-            FileManager.write_file(Config.ADMIN_MODE_FILE, content)
-
-    @staticmethod
-    def _repair_admin_file_permissions() -> None:
-        """Repair permissions for the admin-mode file and its parent directory."""
-        try:
-            os.chmod(Config.ADMIN_MODE_FILE.parent, 0o700)
-            if Config.ADMIN_MODE_FILE.exists():
-                os.chmod(Config.ADMIN_MODE_FILE, 0o600)
-            else:
-                Config.ADMIN_MODE_FILE.touch(mode=0o600, exist_ok=True)
-        except Exception as repair_exc:
-            _LOGGING.error("Failed to repair permissions for admin-mode file: %s", repair_exc)
-            raise
-
 class FileManager:
     """Handles file operations and persistence."""
 
@@ -336,7 +303,6 @@ class FileManager:
             Config.APPDATA_DIR,
             Config.HOTKEY_FILE,
             Config.APP_ICON,
-            Config.ADMIN_MODE_FILE,
         )
         for path in paths_to_hide:
             if not path.exists():
@@ -415,7 +381,7 @@ class HotkeyManager:
     def register_hotkey(self, hotkey: str, callback: callable) -> bool:
         """Register a hotkey with the keyboard library."""
         try:
-            keyboard.unhook_all()
+            self.unhook_hotkey()
             keyboard.add_hotkey(hotkey, callback)
             self.current_hotkey = hotkey
             self.logger.log(f"Hotkey '{hotkey}' registered")
@@ -426,16 +392,32 @@ class HotkeyManager:
 
     def validate_hotkey(self, hotkey: str) -> bool:
         """Validate hotkey format."""
+        if not hotkey or '+' not in hotkey:
+            return False
         try:
-            keys = [k.strip().lower() for k in hotkey.split('+')]
-            if not keys:
+            parts = [k.strip().lower() for k in hotkey.split('+')]
+            if len(parts) < 2:
                 return False
-            main_key = keys[-1]
-            modifiers = keys[:-1]
-            if not (main_key.isalnum() or main_key in keyboard.all_modifiers or len(main_key) == 1):
+            *modifiers, main = parts
+            valid_main = (
+                main.isalnum() or
+                main in keyboard.all_modifiers or
+                (len(main) == 1 and main.isprintable())
+            )
+            if not valid_main:
                 return False
-            return all(mod in self._VALID_MODIFIERS for mod in modifiers)
+            return all(m in self._VALID_MODIFIERS for m in modifiers)
         except Exception:
+            return False
+
+    def unhook_hotkey(self) -> bool:
+        """Unhook all registered hotkeys from the keyboard library."""
+        try:
+            keyboard.unhook_all()
+            self.logger.log("✅ All hotkeys unhooked successfully")
+            return True
+        except Exception as e:
+            self.logger.log(f"❌ Failed to unhook hotkeys: {e}")
             return False
 
     def update_hotkey(self, new_hotkey: str, callback: Final[callable]) -> bool:
@@ -450,16 +432,16 @@ class HotkeyManager:
             )
             return False
         try:
-            keyboard.unhook_all()
-            keyboard.add_hotkey(new_hotkey, lambda: None)
-            keyboard.unhook_all()
+            self.unhook_hotkey()
             Config.save_hotkey(new_hotkey)
-            self.register_hotkey(new_hotkey, callback)
-            self.logger.log(f"✅ Hotkey updated to '{new_hotkey}'")
-            return True
+            success = self.register_hotkey(new_hotkey, callback)
+            if success:
+                self.logger.log(f"✅ Hotkey updated to '{new_hotkey}'")
+            else:
+                self.register_hotkey(self.current_hotkey, callback)
+            return success
         except Exception as e:
             self.logger.log(f"❌ Failed to set hotkey '{new_hotkey}': {e}")
-            self.register_hotkey(self.current_hotkey, callback)
             return False
 
 class ThemeManager:
@@ -653,7 +635,7 @@ class OSCompatibilityChecker:
     }
 
     @classmethod
-    def check_compatibility(cls, logger: Logger, require_admin: bool = False) -> Dict[str, Any]:
+    def check_compatibility(cls, logger: Logger) -> Dict[str, Any]:
         """Perform comprehensive OS compatibility check."""
         system = Config.SYSTEM
         release = Config.RELEASE
@@ -677,10 +659,6 @@ class OSCompatibilityChecker:
         missing_libs = cls._check_libraries(platform_config["required_libs"])
         if missing_libs:
             result["errors"].extend([f"Missing library: {lib}" for lib in missing_libs])
-        if require_admin and not cls._is_admin_or_elevated():
-            result["errors"].append("Administrator privileges required for admin mode")
-        if platform_config.get("admin_warning", False) and not cls._is_admin_or_elevated():
-            result["warnings"].append("Administrator privileges may be required")
         if platform_config.get("pyautogui", False) and not cls._check_pyautogui_support():
             result["errors"].append("PyAutoGUI not supported on this system")
         if not cls._check_system_resources():
@@ -714,37 +692,6 @@ class OSCompatibilityChecker:
             except ImportError:
                 missing.append(lib)
         return missing
-
-    @staticmethod
-    def _is_admin_or_elevated() -> bool:
-        """Check if running with administrator privileges."""
-        try:
-            if Config.SYSTEM == "Windows":
-                import ctypes
-                return ctypes.windll.shell32.IsUserAnAdmin()
-            return os.geteuid() == 0
-        except:
-            return False
-
-    @classmethod
-    def request_admin_privileges(cls) -> bool:
-        """Attempt to restart the application with admin privileges."""
-        try:
-            if Config.SYSTEM == "Windows":
-                import ctypes
-                if not ctypes.windll.shell32.IsUserAnAdmin():
-                    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
-                    return False
-                return True
-            else:
-                if os.geteuid() != 0:
-                    subprocess.run(["sudo", sys.executable] + sys.argv, check=False)
-                    return False
-                return True
-        except Exception as e:
-            logger = Logger(None)
-            logger.log(f"Failed to request admin privileges: {e}")
-            return False
 
     @staticmethod
     def _check_pyautogui_support() -> bool:
@@ -994,9 +941,7 @@ class VersionManager:
         FileManager.write_file(Config.VERSION_CACHE_FILE, f"{version}\n{int(time.time())}")
 
     @staticmethod
-    def fetch_latest_release(
-        timeout: float = 10.0, include_prerelease: bool = False
-    ) -> ReleaseInfo:
+    def fetch_latest_release(timeout: float = 10.0, include_prerelease: bool = False) -> ReleaseInfo:
         """
         Fetch latest release info from GitHub.
         If include_prerelease is True, will consider pre-releases as candidates.
@@ -1142,13 +1087,6 @@ class UIManager:
         self.widgets["last_check_label"].setText(
             f"Last Check: {datetime.now():%Y-%m-%d %H:%M:%S}"
         )
-        self.parent.tray.update_tooltip()
-
-    def update_admin_mode_button(self, is_admin: bool) -> None:
-        """Toggle the admin-mode button text."""
-        self.widgets["admin_mode_toggle"].setText(
-            "Disable Admin Mode" if is_admin else "Enable Admin Mode"
-        )
 
     # ------------------------------------------------------------------
     # Factory helpers
@@ -1224,10 +1162,20 @@ class UIManager:
         group = QGroupBox("🎨 Interface")
         form = QFormLayout()
 
+        # Always-on-top toggle (switch button)
+        aot_switch = QCheckBox("Always on Top")
+        aot_switch.setChecked(False)
+        aot_switch.stateChanged.connect(lambda state: self.parent.toggle_always_on_top())
+        self.widgets["always_on_top_toggle"] = aot_switch
+        form.addRow(aot_switch)
+
+        # Appearance
         form.addRow(
             "Appearance Mode:",
             self._make_combo("appearance_combo", ["Dark", "Light"], self.parent.update_theme),
         )
+
+        # Color theme
         form.addRow(
             "Color Theme:",
             self._make_combo(
@@ -1235,15 +1183,7 @@ class UIManager:
             ),
         )
 
-        admin_btn = self._make_button("Enable Admin Mode", self.parent.toggle_admin_mode)
-        self.widgets["admin_mode_toggle"] = admin_btn
-        form.addRow("Admin Mode:", admin_btn)
-
-        # Always on Top toggle switch
-        always_on_top_switch = self._make_button("Enable/Disable", self.parent.toggle_always_on_top)
-        self.widgets["always_on_top_toggle"] = always_on_top_switch
-        form.addRow("Always on Top:", always_on_top_switch)
-
+        # Progress counter
         progress = QLabel("Cycles: 0")
         progress.setAlignment(Qt.AlignRight)
         self.widgets["progress_label"] = progress
@@ -1330,78 +1270,6 @@ class UIManager:
         widget.setLayout(layout)
         return widget
 
-class SystemTrayManager:
-    """Manages system tray functionality."""
-
-    def __init__(self, parent, logger: Logger) -> None:
-        self.parent = parent
-        self.logger = logger
-        self.tray_icon: Optional[QSystemTrayIcon] = None
-        self._ensure_tray()
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-    def update_tooltip(self) -> None:
-        """Refresh tooltip to reflect current state."""
-        if not self.tray_icon:
-            return
-        mode = "Admin" if self.parent.is_admin_mode else "Normal"
-        self.tray_icon.setToolTip(
-            f"{Config.APP_NAME} (v{self.parent.current_version}, {mode} Mode)"
-        )
-
-    def refresh_menu(self) -> None:
-        """Rebuild the context menu to pick up state changes."""
-        if self.tray_icon:
-            self.tray_icon.setContextMenu(self._build_menu())
-
-    def update_tray_menu(self) -> None:
-        """Alias for refresh_menu to match external calls."""
-        self.refresh_menu()
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-    def _ensure_tray(self) -> None:
-        """Create and show the tray icon; fail gracefully."""
-        try:
-            icon_path = FileManager.download_icon()
-            self.tray_icon = QSystemTrayIcon(QIcon(icon_path))
-            self.update_tooltip()
-            self.tray_icon.setContextMenu(self._build_menu())
-            self.tray_icon.activated.connect(self._on_activated)
-            self.tray_icon.show()
-        except Exception as exc:
-            self.logger.log(f"Tray setup failed: {exc}")
-
-    def _build_menu(self) -> QMenu:
-        """Construct the context menu dynamically."""
-        menu = QMenu()
-
-        def add(text: str, callback: callable) -> QAction:
-            action = QAction(text, self.parent)
-            action.triggered.connect(callback)
-            menu.addAction(action)
-            return action
-
-        add("👁️ Show", self.parent.show_normal)
-        add(f"▶️ Start/Stop ({self.parent.hotkey_manager.current_hotkey})", self.parent.toggle_clicking)
-        add(f"{'🔓 Disable' if self.parent.is_admin_mode else '🔒 Enable'} Admin Mode", self.parent.toggle_admin_mode)
-        add("🔄 Check Updates", self.parent.check_for_updates)
-
-        menu.addSeparator()
-        add("❌ Quit", self.parent.quit_app)
-        return menu
-
-    # ------------------------------------------------------------------
-    # Event handlers
-    # ------------------------------------------------------------------
-    def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
-        """Handle left-click / double-click on the tray icon."""
-        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
-            self.parent.show_normal()
-
 class ClickerEngine:
     """Manages the auto-clicking functionality."""
     def __init__(self, parent, logger: Logger):
@@ -1409,15 +1277,10 @@ class ClickerEngine:
         self.logger = logger
         self.running = False
         self.thread = None
-        self.require_admin = Config.SYSTEM == "Windows"  # Require admin on Windows for clicking
 
     def start(self) -> None:
         """Start the clicker engine."""
         if self.running:
-            return
-        if self.require_admin and not self.parent.is_admin_mode:
-            self.logger.log("❌ Admin mode required for clicking on this system")
-            QMessageBox.warning(None, "Admin Mode Required", "Please enable Admin Mode to use the clicker functionality.")
             return
         self.running = True
         self.parent.start_btn.setEnabled(False)
@@ -1475,6 +1338,58 @@ class ClickerEngine:
             'cycle_delay': max(0.01, safe_float(widgets.get('cycle_delay'), Config.DEFAULT_SETTINGS["cycle_delay"]))
         }
 
+class SystemTrayManager:
+    """Manages system tray functionality."""
+
+    def __init__(self, parent, logger: Logger) -> None:
+        self.parent = parent
+        self.logger = logger
+        self.tray_icon: Optional[QSystemTrayIcon] = None
+        self._ensure_tray()
+
+    def refresh_menu(self) -> None:
+        """Rebuild the context menu to pick up state changes."""
+        if self.tray_icon:
+            self.tray_icon.setContextMenu(self._build_menu())
+
+    def update_tray_menu(self) -> None:
+        """Alias for refresh_menu to match external calls."""
+        self.refresh_menu()
+
+    def _ensure_tray(self) -> None:
+        """Create and show the tray icon; fail gracefully."""
+        try:
+            icon_path = FileManager.download_icon()
+            self.tray_icon = QSystemTrayIcon(QIcon(icon_path))
+            self.tray_icon.setContextMenu(self._build_menu())
+            self.tray_icon.activated.connect(self._on_activated)
+            self.tray_icon.show()
+        except Exception as exc:
+            self.logger.log(f"Tray setup failed: {exc}")
+
+    def _build_menu(self) -> QMenu:
+        """Construct the context menu dynamically."""
+        menu = QMenu()
+
+        def add(text: str, callback: Final[callable]) -> QAction:
+            action = QAction(text, self.parent)
+            action.triggered.connect(callback)
+            menu.addAction(action)
+            return action
+
+        add("👁️ Show", self.parent.show_normal)
+        add(f"▶️ Start/Stop ({self.parent.hotkey_manager.current_hotkey})", self.parent.toggle_clicking)
+        add("🔄 Check Updates", self.parent.check_for_updates)
+        menu.addSeparator()
+        add("🚫 Kill Application (Emergency If Crashes)", self.parent.kill_application)  # Added kill switch option
+        add("❌ Quit", self.parent.quit_app)
+        return menu
+
+    def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        """Handle left-click / double-click on the tray icon."""
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
+            self.parent.show_normal()
+
 class AutoClickerApp(QMainWindow):
     """Main application window."""
     def __init__(self, lock: SingletonLock):
@@ -1487,7 +1402,6 @@ class AutoClickerApp(QMainWindow):
         self.update_checker = None
         self.current_appearance = Config.DEFAULT_THEME
         self.current_color_theme = Config.DEFAULT_COLOR
-        self.is_admin_mode = Config.load_admin_mode()
         self.ui = UIManager(self, self.logger)
         self.tray = SystemTrayManager(self, self.logger)
         self.clicker = ClickerEngine(self, self.logger)
@@ -1496,8 +1410,6 @@ class AutoClickerApp(QMainWindow):
         self._setup_timers()
         self.hotkey_manager.register_hotkey(self.hotkey_manager.current_hotkey, self.toggle_clicking)
         self.ui.widgets['update_text'].setPlainText(Config.format_update_logs())
-        self._update_admin_mode_ui()
-        self._check_admin_mode_compatibility()
         self.update_theme()
 
     def _init_ui(self) -> None:
@@ -1558,39 +1470,6 @@ class AutoClickerApp(QMainWindow):
         self.update_timer.start(Config.UPDATE_CHECK_INTERVAL)
         QTimer.singleShot(10000, self.check_for_updates)
 
-    def _check_admin_mode_compatibility(self) -> None:
-        """Check compatibility for admin mode."""
-        if self.is_admin_mode:
-            compat_result = OSCompatibilityChecker.check_compatibility(self.logger, require_admin=True)
-            if not compat_result["compatible"]:
-                self.logger.log("⚠️ Admin mode not supported, switching to non-admin mode")
-                self.is_admin_mode = False
-                Config.save_admin_mode(False)
-                self._update_admin_mode_ui()
-                OSCompatibilityChecker.show_compatibility_dialog(compat_result, self.logger)
-
-    def toggle_admin_mode(self) -> None:
-        """Toggle between admin and non-admin modes."""
-        if self.is_admin_mode:
-            self.is_admin_mode = False
-            Config.save_admin_mode(False)
-            self.logger.log("🔓 Switched to non-admin mode")
-        else:
-            if OSCompatibilityChecker.request_admin_privileges():
-                self.is_admin_mode = True
-                Config.save_admin_mode(True)
-                self.logger.log("🔒 Switched to admin mode")
-            else:
-                self.quit_app()
-                return
-        self._update_admin_mode_ui()
-
-    def _update_admin_mode_ui(self) -> None:
-        """Update UI elements related to admin mode."""
-        self.ui.update_admin_mode_button(self.is_admin_mode)
-        self.tray.update_tray_menu()
-        ThemeManager.apply_theme(self, self.current_appearance, self.current_color_theme)
-
     def toggle_clicking(self) -> None:
         """Toggle the clicker engine."""
         if self.clicker.running:
@@ -1599,7 +1478,7 @@ class AutoClickerApp(QMainWindow):
             self.clicker.start()
 
     def toggle_always_on_top(self) -> None:
-        """Toggle the window always-on-top flag."""
+        """Toggle the window always-on-top flag and update UI text."""
         flags = self.windowFlags()
         if flags & Qt.WindowStaysOnTopHint:
             self.setWindowFlags(flags & ~Qt.WindowStaysOnTopHint)
@@ -1607,7 +1486,7 @@ class AutoClickerApp(QMainWindow):
         else:
             self.setWindowFlags(flags | Qt.WindowStaysOnTopHint)
             self.logger.log("🔒 Enabled always-on-top")
-        self.show()  # Required to apply the new flags
+        self.show()
 
     def update_hotkey(self) -> None:
         """Update the hotkey based on user input."""
@@ -1654,12 +1533,12 @@ class AutoClickerApp(QMainWindow):
         self.ui.update_version_display(self.current_version, self.latest_version)
         FileManager.write_file(Config.UPDATE_CHECK_FILE, datetime.now().isoformat())
 
-    def _on_update_available(self, info: dict, seperator: str = "\n", otherseperator: str = "\n\n") -> None:
+    def _on_update_available(self, info: dict, separator: str = "\n", otherseparator: str = "\n\n") -> None:
         """Handle update available signal."""
         reply = QMessageBox.question(
             self, "Update Available",
-            f"New version {info['version']} available!{otherseperator}"
-            f"Current: v{self.current_version}{seperator}Latest: v{info['version']}{otherseperator}"
+            f"New version {info['version']} available!{otherseparator}"
+            f"Current: v{self.current_version}{separator}Latest: v{info['version']}{otherseparator}"
             f"Visit GitHub for download?",
             QMessageBox.Yes | QMessageBox.No
         )
@@ -1682,6 +1561,39 @@ class AutoClickerApp(QMainWindow):
         """Handle window close event."""
         event.ignore()
         self.hide()
+
+    def kill_application(self) -> None:
+        """Immediately terminate the application with full cleanup."""
+        self.logger.log("🚫 Kill switch activated: Terminating application...")
+        # Stop the clicker engine
+        if self.clicker.running:
+            self.clicker.stop()
+        # Stop the update checker
+        if self.update_checker and self.update_checker.isRunning():
+            self.update_checker.stop()
+        # Stop the update timer
+        self.update_timer.stop()
+        # Release the singleton lock
+        self.lock.release_lock()
+        # Unhook all keyboard hotkeys
+        try:
+            keyboard.unhook_all()
+        except Exception as e:
+            self.logger.log(f"Failed to unhook hotkeys: {e}")
+        # Hide and clean up the system tray
+        if self.tray.tray_icon:
+            try:
+                self.tray.tray_icon.hide()
+                self.tray.tray_icon.deleteLater()
+            except Exception as e:
+                self.logger.log(f"Failed to clean up system tray: {e}")
+        try:
+            # Quit the application
+            QApplication.quit()
+            # Ensure the process terminates
+            sys.exit(0)
+        except Exception as e:
+            self.logger.log(f"Failed to quit application: {e}")
 
     def quit_app(self) -> None:
         """Clean shutdown with lock release."""
