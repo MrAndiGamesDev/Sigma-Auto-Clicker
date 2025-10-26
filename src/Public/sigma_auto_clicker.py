@@ -15,7 +15,6 @@ import random
 import re
 import time
 import contextlib
-import os
 import logging as _logging
 from datetime import datetime
 from pathlib import Path
@@ -89,12 +88,6 @@ class Config(metaclass=_MetaConfig):
         f"https://raw.githubusercontent.com/{GITHUB_REPO}/refs/heads/dev/src/icons/mousepointer.ico"
     )
 
-
-    # ------------------------------------------------------------------
-    # Discord Settingd
-    # ------------------------------------------------------------------
-    CLIENT_ID: Final[str] = os.getenv("CLIENT_ID")
-
     # ------------------------------------------------------------------
     # Defaults
     # ------------------------------------------------------------------
@@ -108,7 +101,6 @@ class Config(metaclass=_MetaConfig):
         "click_delay": "1",
         "cycle_delay": "0.5",
     }
-
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
@@ -372,7 +364,7 @@ class FileManager:
         return str(Config.APP_ICON)
 
     @staticmethod
-    def read_file(filepath: Path, default: str | None = None) -> str | None:
+    def read_file(filepath: Path, default: Optional[str] = None) -> Optional[str]:
         """Read content from file with validation."""
         if not filepath.is_file():
             return default
@@ -391,21 +383,25 @@ class FileManager:
             _LOGGING.debug("Wrote to %s: %s", filepath, content)
         except PermissionError as exc:
             _LOGGING.warning("Permission denied writing %s: %s", filepath, exc)
-            try:
-                # Attempt to fix permissions for the file and its parent directory
-                os.chmod(filepath.parent, 0o700)
-                if filepath.exists():
-                    os.chmod(filepath, 0o600)
-                else:
-                    # Create the file with restricted permissions
-                    filepath.touch(mode=0o600, exist_ok=True)
-                # Retry write
-                filepath.write_text(content.strip(), encoding="utf-8")
-                _LOGGING.debug("Repaired permissions and wrote to %s", filepath)
-            except Exception as repair_exc:
-                _LOGGING.error("Failed to repair permissions for %s: %s", filepath, repair_exc)
+            FileManager._repair_permissions(filepath)
+            # Retry write after permission repair
+            filepath.write_text(content.strip(), encoding="utf-8")
+            _LOGGING.debug("Repaired permissions and wrote to %s", filepath)
         except Exception as exc:
             _LOGGING.error("Error writing to %s: %s", filepath, exc)
+
+    @staticmethod
+    def _repair_permissions(filepath: Path) -> None:
+        """Repair permissions for the file and its parent directory."""
+        try:
+            os.chmod(filepath.parent, 0o700)
+            if filepath.exists():
+                os.chmod(filepath, 0o600)
+            else:
+                filepath.touch(mode=0o600, exist_ok=True)
+        except Exception as repair_exc:
+            _LOGGING.error("Failed to repair permissions for %s: %s", filepath, repair_exc)
+            raise
 
 class HotkeyManager:
     """Manages hotkey registration and validation."""
