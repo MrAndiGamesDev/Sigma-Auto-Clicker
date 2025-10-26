@@ -17,9 +17,6 @@ import time
 import contextlib
 import winreg
 import ctypes
-import win32api
-import win32con
-import win32gui
 import logging as _logging
 from ctypes import wintypes
 from datetime import datetime
@@ -624,7 +621,6 @@ class ThemeManager:
         if Config.SYSTEM != "Windows":
             return Config.DEFAULT_THEME
         try:
-            import winreg
             with winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
                 r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
@@ -976,6 +972,7 @@ class VersionManager:
         """
         if not isinstance(timeout, (int, float)) or timeout <= 0:
             return ReleaseInfo.failure("Invalid timeout value")
+            
         if not Config.GITHUB_REPO:
             return ReleaseInfo.failure("Missing GitHub repository configuration")
 
@@ -1405,7 +1402,6 @@ class ClickerEngine:
                         ("dwExtraInfo", ctypes.c_void_p),
                     ]
                 _fields_ = [("mi", MOUSEINPUT)]
-
             _fields_ = [("type", wintypes.DWORD), ("union", _INPUTunion)]
 
         INPUT_MOUSE = 0
@@ -1777,11 +1773,14 @@ class AutoClickerApp(QMainWindow):
         # Stop the clicker engine
         if self.clicker.running:
             self.clicker.stop()
+
         # Stop the update checker
         if self.update_checker and self.update_checker.isRunning():
             self.update_checker.stop()
+
         # Stop the update timer
         self.update_timer.stop()
+        
         # Release the singleton lock
         self.lock.release_lock()
         # Unhook all keyboard hotkeys
