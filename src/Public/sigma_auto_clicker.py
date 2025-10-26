@@ -555,18 +555,40 @@ class ThemeManager:
         color_theme: str,
         logger: Optional[Logger] = None
     ) -> None:
-        """Apply base theme and button palette to a widget tree."""
         logger = logger or Logger(None)
         appearance = appearance if appearance in cls.BASE_STYLES else Config.DEFAULT_THEME
         try:
-            style_config = cls.BASE_STYLES[appearance]
+            # Get system accent color for Windows 11
+            accent_color = cls._get_system_accent_color() or cls.COLOR_THEMES[color_theme]["base"]
+            style_config = cls.BASE_STYLES[appearance].copy()
+            style_config["accent_color"] = accent_color
             widget.setStyleSheet(cls._BASE_STYLE_TEMPLATE.format(**style_config))
             button_style = cls._build_button_style(color_theme, appearance, logger)
             for button in widget.findChildren(QPushButton):
                 button.setStyleSheet(button_style)
+            # Apply Mica effect to main window
+            if isinstance(widget, QMainWindow) and sys.platform == "win32":
+                hwnd = widget.winId()
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                    hwnd, 38, ctypes.byref(ctypes.c_int(2)), ctypes.sizeof(ctypes.c_int)  # DWMWA_SYSTEMBACKDROP_TYPE (Mica)
+                )
         except Exception as exc:
             logger.log(f"❌ Theme application failed: {exc}")
             widget.setStyleSheet(cls._BASE_STYLE_TEMPLATE.format(**cls.BASE_STYLES[Config.DEFAULT_THEME]))
+
+    @staticmethod
+    def _get_system_accent_color() -> Optional[str]:
+        """Retrieve Windows 11 system accent color from registry."""
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\DWM"
+            ) as key:
+                color, _ = winreg.QueryValueEx(key, "AccentColor")
+                # Convert to hex
+                return f"#{((color >> 16) & 0xFF):02x}{((color >> 8) & 0xFF):02x}{(color & 0xFF):02x}"
+        except Exception:
+            return None
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -1464,9 +1486,10 @@ class SystemTrayManager:
     # Public API
     # ------------------------------------------------------------------
     def refresh_menu(self) -> None:
-        """Rebuild the context menu to pick up state changes."""
-        if self.tray_icon:
-            self.tray_icon.setContextMenu(self._build_menu())
+        """Rebuild the context menu only if necessary."""
+        if self.tray_icon and not hasattr(self, '_menu_cache'):
+            self._menu_cache = self._build_menu()
+            self.tray_icon.setContextMenu(self._menu_cache)
 
     def update_tray_menu(self) -> None:
         """Alias for refresh_menu to match external calls."""
@@ -2028,43 +2051,38 @@ class ApplicationLauncher:
     # ------------------------------------------------------------------
     @staticmethod
     def _build_qapplication() -> QApplication:
-        # Destroy any existing QApplication instance cleanly
         if (existing := QApplication.instance()) is not None:
             existing.quit()
             existing.deleteLater()
             QApplication.processEvents()
-            time.sleep(0.05)  # shorter grace period for Win11 speed
-
-        # Windows 11: enable native DPI awareness v2 for crisp rendering
+            time.sleep(0.02)  # Reduced grace period for faster startup
         if sys.platform == "win32":
+                # Use DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 for Windows 11
             try:
-                ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+                ctypes.windll.user32.SetProcessDpiAwarenessContext(-4)  # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
             except Exception:
-                pass  # fallback silently
-
-        # Use PassThrough to avoid Qt’s scaling rounding issues on Win11
+                ctypes.windll.user32.SetProcessDPIAware()  # Fallback
         QApplication.setHighDpiScaleFactorRoundingPolicy(
             Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
         )
-
         app = QApplication(sys.argv)
         app.setQuitOnLastWindowClosed(False)
         app.setApplicationName(Config.APP_NAME)
         app.setOrganizationName(Config.AUTHORNAME)
-
-        # Windows 11 dark-mode aware title bar (build 22000+)
+        # Windows 11 dark title bar
         if sys.platform == "win32":
             try:
                 build = int(platform.version().split('.')[2])
                 if build >= 22000:  # Win11
-                    app.setStyleSheet("QMainWindow{ background-color:#1e1e2e; }")
-                    # Dark title bar via Win32 API
                     ctypes.windll.dwmapi.DwmSetWindowAttribute(
                         ctypes.c_void_p(0), 20, ctypes.byref(ctypes.c_int(2)), ctypes.sizeof(ctypes.c_int)
                     )
+                    # Apply Mica effect to main window
+                    ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                        ctypes.c_void_p(0), 38, ctypes.byref(ctypes.c_int(2)), ctypes.sizeof(ctypes.c_int)  # DWMWA_SYSTEMBACKDROP_TYPE
+                    )
             except Exception:
                 pass
-
         return app
 
     @staticmethod
