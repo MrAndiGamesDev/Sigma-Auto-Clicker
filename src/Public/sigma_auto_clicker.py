@@ -149,20 +149,8 @@ class Config(metaclass=_MetaConfig):
             date="2025-10-27",
             version="1.1.3-alpha.2",
             description=(
-                "Refactored a sourcecode into matching to win11 UI. "
-                "Modernized window chrome with rounded corners and mica backdrop. "
-                "Replaced legacy bitmap icons with scalable Segoe Fluent icons. "
-                "Added snap-layouts support and subtle acrylic effects on pop-ups. "
-                "Tuned animation curves to align with Windows 11 motion guidelines. "
-                "Updated color palette to use system accent color for better integration. "
-                "Introduced compact title-bar buttons and auto-hide scrollbars. "
-                "Ensured high-DPI awareness and per-monitor V2 DPI scaling. "
-                "Refreshed tab styling to match Win11 segmented control look. "
-                "Added light-dismiss fly-outs and touch-friendly hit-targets. "
-                "Implemented rounded context menus with soft shadows. "
-                "Aligned typography with Segoe UI Variable font stack. "
-                "Reduced visual noise by removing redundant separator lines. "
-                "Enabled dynamic dark/light theme switching without restart. "
+                "Refactored a source code into matching to win11 UI. "
+                "and much more!. "
             ),
         ),
         UpdateLogEntry(
@@ -2120,8 +2108,9 @@ class ApplicationLauncher:
 
     @staticmethod
     def _run_main_app(app: QApplication, lock: SingletonLock, logger: Logger) -> None:
+        main_window = AutoClickerApp(lock)
         try:
-            AutoClickerApp(lock)
+            main_window.show()
             sys.exit(app.exec())
         except Exception as exc:
             logger.log(f"Application runtime error: {exc}")
