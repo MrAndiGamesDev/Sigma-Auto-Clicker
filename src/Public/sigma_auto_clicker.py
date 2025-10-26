@@ -15,6 +15,7 @@ import random
 import re
 import time
 import contextlib
+import os
 import logging as _logging
 from datetime import datetime
 from pathlib import Path
@@ -85,8 +86,14 @@ class Config(metaclass=_MetaConfig):
     AUTHORNAME: Final[str] = "MrAndiGamesDev"
     GITHUB_REPO: Final[str] = f"{AUTHORNAME}/Sigma-Auto-Clicker"
     ICON_URL: Final[str] = (
-        f"https://raw.githubusercontent.com/{GITHUB_REPO}/refs/heads/stable/src/icons/mousepointer.ico"
+        f"https://raw.githubusercontent.com/{GITHUB_REPO}/refs/heads/dev/src/icons/mousepointer.ico"
     )
+
+
+    # ------------------------------------------------------------------
+    # Discord Settingd
+    # ------------------------------------------------------------------
+    CLIENT_ID: Final[str] = os.getenv("CLIENT_ID")
 
     # ------------------------------------------------------------------
     # Defaults
@@ -144,7 +151,7 @@ class Config(metaclass=_MetaConfig):
     # ------------------------------------------------------------------
     UPDATE_LOGS: Final[List[UpdateLogEntry]] = [
         UpdateLogEntry(
-            date="2025-10-25",
+            date="2025-10-26",
             version="1.1.3",
             description=(
                 "Removed Discord Rich Presence to trim dependencies and speed up startup. "
@@ -1651,12 +1658,12 @@ class AutoClickerApp(QMainWindow):
         self.ui.update_version_display(self.current_version, self.latest_version)
         FileManager.write_file(Config.UPDATE_CHECK_FILE, datetime.now().isoformat())
 
-    def _on_update_available(self, info: dict) -> None:
+    def _on_update_available(self, info: dict, seperator: str = "\n", otherseperator: str = "\n\n") -> None:
         """Handle update available signal."""
         reply = QMessageBox.question(
             self, "Update Available",
-            f"New version {info['version']} available!\n\n"
-            f"Current: v{self.current_version}\nLatest: v{info['version']}\n\n"
+            f"New version {info['version']} available!{otherseperator}"
+            f"Current: v{self.current_version}{seperator}Latest: v{info['version']}{otherseperator}"
             f"Visit GitHub for download?",
             QMessageBox.Yes | QMessageBox.No
         )
@@ -1891,6 +1898,9 @@ class SplashScreen(QWidget):
 
     def __init__(self, timeout: int = 3000, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+        self._dots = 0
+        self._base_text = "Loading"
+        self._subtitle_timer: Optional[QTimer] = None
         self._build_ui()
         QTimer.singleShot(timeout, self.close)
 
@@ -1906,7 +1916,6 @@ class SplashScreen(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
-
         layout.addWidget(self._create_title(), alignment=Qt.AlignCenter)
         layout.addSpacing(10)
         layout.addWidget(self._create_subtitle(), alignment=Qt.AlignCenter)
@@ -1925,16 +1934,12 @@ class SplashScreen(QWidget):
         return lbl
 
     def _create_subtitle(self) -> QLabel:
-        lbl = QLabel("Loading")
+        lbl = QLabel(self._base_text)
         lbl.setStyleSheet(self._SUBTITLE_STYLE)
         lbl.setAlignment(Qt.AlignCenter)
 
-        # Animated moving dots
-        self._dots = 0
-        self._base_text = "Loading"
-
-        def animate():
-            self._dots = ((self._dots + 1) % 4)
+        def animate() -> None:
+            self._dots = (self._dots + 1) % 4
             lbl.setText(self._base_text + "." * self._dots + " " * (3 - self._dots))
 
         self._subtitle_timer = QTimer(lbl)
@@ -2054,7 +2059,6 @@ class ApplicationLauncher:
         splash.show()
         app.processEvents()  # ensure splash paints immediately
 
-        # Create main window after splash is shown but before closing it
         try:
             main_window = AutoClickerApp(lock)
         except Exception as exc:
@@ -2098,8 +2102,8 @@ class AppLauncher:
     # Public API
     # ------------------------------------------------------------------
     def start(self) -> None:
+        self._log.info("Application started")
         try:
-            self._log.info("Application started")
             self._app.run()
         except Exception as exc:
             self._log.error(f"Application error: {exc}")
