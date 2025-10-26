@@ -87,7 +87,7 @@ class PyInstallerBuilder:
             str(self.script_file),
             "--noconfirm",
             "--noconsole",
-            "--onefile",
+            "--onedir",
             "--clean",
             f"--name={self._get_executable_name()}",
             f"--icon={self.icon_path}",
