@@ -83,7 +83,7 @@ class PyInstallerBuilder:
         return name
 
     def _build_pyinstaller_args(self) -> List[str]:
-        args = [
+        return [
             str(self.script_file),
             "--noconfirm",
             "--noconsole",
@@ -97,8 +97,6 @@ class PyInstallerBuilder:
             f"--collect-submodules={self.config.collect_modules}",
             "--log-level=WARN",
         ]
-        self.logger.Log("debug", f"PyInstaller arguments built: {args}")
-        return args
 
     # ------------------------------------------------------------------
     # Cleanup
