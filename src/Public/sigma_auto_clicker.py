@@ -15,7 +15,13 @@ import random
 import re
 import time
 import contextlib
+import winreg
+import ctypes
+import win32api
+import win32con
+import win32gui
 import logging as _logging
+from ctypes import wintypes
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass
@@ -119,7 +125,7 @@ class Config(metaclass=_MetaConfig):
     # ------------------------------------------------------------------
     HOME_DIR: Final[Path] = Path.home()
     APPDATA_DIR: Final[Path] = (
-        HOME_DIR / "AppData" / "Roaming" / "SigmaAutoClicker"
+        HOME_DIR / "AppData" / "Local" / "SigmaAutoClicker"
         if SYSTEM == "Windows"
         else HOME_DIR / "sigma_auto_clicker"
     )
@@ -139,6 +145,14 @@ class Config(metaclass=_MetaConfig):
     # Update history
     # ------------------------------------------------------------------
     UPDATE_LOGS: Final[List[UpdateLogEntry]] = [
+        UpdateLogEntry(
+            date="2025-10-27",
+            version="1.1.3-alpha.2",
+            description=(
+                "Refactored a source code into matching to win11 UI. "
+                "and much more!. "
+            ),
+        ),
         UpdateLogEntry(
             date="2025-10-26",
             version="1.1.3",
@@ -864,14 +878,28 @@ class SingletonLock(QObject):
         self.listener_thread = threading.Thread(target=listen, daemon=True)
         self.listener_thread.start()
 
-@dataclass(slots=True, frozen=True)
 class ReleaseInfo:
-    version: str
-    download_url: str
-    release_notes: str
-    prerelease: bool
-    success: bool
-    error: Optional[str] = None
+    """Immutable release information container (C-compatible plain class)."""
+    __slots__ = ("version", "download_url", "release_notes", "prerelease", "success", "error")
+
+    def __init__(
+        self,
+        version: str,
+        download_url: str,
+        release_notes: str,
+        prerelease: bool,
+        success: bool,
+        error: Optional[str] = None,
+    ) -> None:
+        object.__setattr__(self, "version", version)
+        object.__setattr__(self, "download_url", download_url)
+        object.__setattr__(self, "release_notes", release_notes)
+        object.__setattr__(self, "prerelease", prerelease)
+        object.__setattr__(self, "success", success)
+        object.__setattr__(self, "error", error)
+
+    def __setattr__(self, name: str, value) -> None:
+        raise AttributeError("ReleaseInfo is immutable")
 
     @staticmethod
     def failure(error: str) -> "ReleaseInfo":
@@ -1087,6 +1115,9 @@ class UIManager:
         self.widgets["last_check_label"].setText(
             f"Last Check: {datetime.now():%Y-%m-%d %H:%M:%S}"
         )
+        # Force the UI to repaint the labels immediately
+        for w in ("version_display", "current_version_label", "latest_version_label", "last_check_label"):
+            self.widgets[w].update()
 
     # ------------------------------------------------------------------
     # Factory helpers
@@ -1271,13 +1302,18 @@ class UIManager:
         return widget
 
 class ClickerEngine:
-    """Manages the auto-clicking functionality."""
+    """Manages the auto-clicking functionality – Windows 11 optimized."""
     def __init__(self, parent, logger: Logger):
         self.parent = parent
         self.logger = logger
         self.running = False
         self.thread = None
+        # Win11: ensure we send INPUT structs instead of legacy mouse_event
+        self._ensure_uiAccess()
 
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
     def start(self) -> None:
         """Start the clicker engine."""
         if self.running:
@@ -1297,49 +1333,130 @@ class ClickerEngine:
         self.parent.stop_btn.setEnabled(False)
         self.logger.log("⏹️ Stopped clicking")
 
+    # ------------------------------------------------------------------
+    # Core loop
+    # ------------------------------------------------------------------
     def _click_loop(self) -> None:
-        """Main click loop."""
+        """Main click loop – Win11 precision timers & INPUT injection."""
         try:
             settings = self._get_settings()
             cycle_count = 0
+            # Use Win11 high-resolution timer if available
+            self._enable_precision_timer()
             while self.running and (settings['max_loops'] == 0 or cycle_count < settings['max_loops']):
                 for _ in range(settings['clicks']):
                     if not self.running:
                         break
-                    pyautogui.click()
+                    self._send_click()
                     self.logger.log("🖱️ Clicked")
-                    time.sleep(settings['click_delay'])
+                    self._precise_sleep(settings['click_delay'])
                 cycle_count += 1
                 self.parent.ui.widgets['progress_label'].setText(f"Cycles: {cycle_count}")
                 self.logger.log(f"🔁 Cycle {cycle_count} complete")
-                time.sleep(settings['cycle_delay'])
+                self._precise_sleep(settings['cycle_delay'])
         except Exception as e:
             self.logger.log(f"❌ Clicker error: {e}")
         finally:
+            self._disable_precision_timer()
             self.stop()
 
+    # ------------------------------------------------------------------
+    # Windows 11 specifics
+    # ------------------------------------------------------------------
+    def _ensure_uiAccess(self) -> None:
+        """Ensure we can send input to elevated/UWP windows."""
+        # Try to allow UIAccess for this process (best-effort)
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+    def _enable_precision_timer(self) -> None:
+        """Request 1 ms timer resolution for stable delays."""
+        ctypes.windll.winmm.timeBeginPeriod(1)
+
+    def _disable_precision_timer(self) -> None:
+        """Release precision timer."""
+        ctypes.windll.winmm.timeEndPeriod(1)
+
+    def _precise_sleep(self, seconds: float) -> None:
+        """High-resolution sleep using Win32 waitable timer."""
+        if seconds <= 0:
+            return
+        # 100-ns units
+        dt = -int(seconds * 10_000_000)
+        handle = ctypes.windll.kernel32.CreateWaitableTimerA(None, True, None)
+        ctypes.windll.kernel32.SetWaitableTimer(handle, ctypes.byref(ctypes.c_longlong(dt)), 0, None, None, False)
+        ctypes.windll.kernel32.WaitForSingleObject(handle, 0xFFFFFFFF)
+        ctypes.windll.kernel32.CloseHandle(handle)
+
+    def _send_click(self) -> None:
+        """Send a single left-click using Win32 INPUT structure."""
+        # INPUT structure for mouse
+        class INPUT(ctypes.Structure):
+            class _INPUTunion(ctypes.Union):
+                class MOUSEINPUT(ctypes.Structure):
+                    _fields_ = [
+                        ("dx", wintypes.LONG),
+                        ("dy", wintypes.LONG),
+                        ("mouseData", wintypes.DWORD),
+                        ("dwFlags", wintypes.DWORD),
+                        ("time", wintypes.DWORD),
+                        ("dwExtraInfo", ctypes.c_void_p),
+                    ]
+                _fields_ = [("mi", MOUSEINPUT)]
+
+            _fields_ = [("type", wintypes.DWORD), ("union", _INPUTunion)]
+
+        INPUT_MOUSE = 0
+        MOUSEEVENTF_LEFTDOWN = 0x0002
+        MOUSEEVENTF_LEFTUP = 0x0004
+
+        def make_input(flags):
+            inp = INPUT()
+            inp.type = INPUT_MOUSE
+            inp.union.mi.dx = 0
+            inp.union.mi.dy = 0
+            inp.union.mi.mouseData = 0
+            inp.union.mi.dwFlags = flags
+            inp.union.mi.time = 0
+            inp.union.mi.dwExtraInfo = None
+            return inp
+
+        inputs = (INPUT * 2)(
+            make_input(MOUSEEVENTF_LEFTDOWN),
+            make_input(MOUSEEVENTF_LEFTUP),
+        )
+        ctypes.windll.user32.SendInput(2, inputs, ctypes.sizeof(INPUT))
+
+    # ------------------------------------------------------------------
+    # Settings helper
+    # ------------------------------------------------------------------
     def _get_settings(self) -> Dict[str, Any]:
         """Get clicker settings from UI."""
         widgets = self.parent.ui.widgets
+
         def safe_int(widget, default):
             try:
                 return int(widget.text() or default)
-            except:
+            except (ValueError, TypeError):
                 return default
+
         def safe_float(widget, default):
             try:
                 return float(widget.text() or default)
-            except:
+            except (ValueError, TypeError):
                 return default
+
         return {
             'clicks': max(1, safe_int(widgets.get('click_count'), Config.DEFAULT_SETTINGS["click_count"])),
             'max_loops': safe_int(widgets.get('loop_count'), Config.DEFAULT_SETTINGS["loop_count"]),
-            'click_delay': max(0.01, safe_float(widgets.get('click_delay'), Config.DEFAULT_SETTINGS["click_delay"])),
-            'cycle_delay': max(0.01, safe_float(widgets.get('cycle_delay'), Config.DEFAULT_SETTINGS["cycle_delay"]))
+            'click_delay': max(0.001, safe_float(widgets.get('click_delay'), Config.DEFAULT_SETTINGS["click_delay"])),
+            'cycle_delay': max(0.001, safe_float(widgets.get('cycle_delay'), Config.DEFAULT_SETTINGS["cycle_delay"]))
         }
 
 class SystemTrayManager:
-    """Manages system tray functionality."""
+    """Windows-11-optimized system-tray manager with native styling and modern menu."""
 
     def __init__(self, parent, logger: Logger) -> None:
         self.parent = parent
@@ -1347,6 +1464,9 @@ class SystemTrayManager:
         self.tray_icon: Optional[QSystemTrayIcon] = None
         self._ensure_tray()
 
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
     def refresh_menu(self) -> None:
         """Rebuild the context menu to pick up state changes."""
         if self.tray_icon:
@@ -1356,6 +1476,9 @@ class SystemTrayManager:
         """Alias for refresh_menu to match external calls."""
         self.refresh_menu()
 
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
     def _ensure_tray(self) -> None:
         """Create and show the tray icon; fail gracefully."""
         try:
@@ -1363,32 +1486,118 @@ class SystemTrayManager:
             self.tray_icon = QSystemTrayIcon(QIcon(icon_path))
             self.tray_icon.setContextMenu(self._build_menu())
             self.tray_icon.activated.connect(self._on_activated)
+            self.tray_icon.setToolTip(f"{Config.APP_NAME} – Ready")
             self.tray_icon.show()
+            # Windows 11: request dark-mode-aware tooltip if dark mode is active
+            self._sync_tooltip_theme()
         except Exception as exc:
             self.logger.log(f"Tray setup failed: {exc}")
 
     def _build_menu(self) -> QMenu:
-        """Construct the context menu dynamically."""
+        """Construct a Windows-11-style context menu with rounded corners & fluent icons."""
         menu = QMenu()
+        menu.setStyleSheet(self._win11_menu_qss())
 
-        def add(text: str, callback: Final[callable]) -> QAction:
-            action = QAction(text, self.parent)
+        def add(text: str, callback: Final[callable], icon_utf16: str = "") -> QAction:
+            action = QAction(f"{icon_utf16} {text}", self.parent)
             action.triggered.connect(callback)
             menu.addAction(action)
             return action
 
-        add("👁️ Show", self.parent.show_normal)
-        add(f"▶️ Start/Stop ({self.parent.hotkey_manager.current_hotkey})", self.parent.toggle_clicking)
-        add("🔄 Check Updates", self.parent.check_for_updates)
+        add("Show", self.parent.show_normal, "👁️")
+        add(f"Start / Stop  ({self.parent.hotkey_manager.current_hotkey})", self.parent.toggle_clicking, "▶️")
+        add("Check for Updates", self.parent.check_for_updates, "🔄")
         menu.addSeparator()
-        add("🚫 Kill Application (Emergency If Crashes)", self.parent.kill_application)  # Added kill switch option
-        add("❌ Quit", self.parent.quit_app)
+        add("Kill Application (Emergency)", self.parent.kill_application, "🚫")
+        add("Quit", self.parent.quit_app, "❌")
         return menu
 
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         """Handle left-click / double-click on the tray icon."""
         if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
             self.parent.show_normal()
+
+    # ------------------------------------------------------------------
+    # Windows 11 specific
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _win11_menu_qss() -> str:
+        """Return QSS that mimics Windows 11 rounded context menus."""
+        return """
+            QMenu {
+                background-color: #f3f3f3;
+                border: 1px solid #e5e5e5;
+                border-radius: 8px;
+                padding: 4px;
+                font-family: "Segoe UI", Arial, sans-serif;
+                font-size: 13px;
+            }
+            QMenu::item {
+                border-radius: 4px;
+                padding: 6px 24px 6px 12px;
+                color: #202020;
+            }
+            QMenu::item:selected {
+                background-color: #e5e5e5;
+                color: #000;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #e0e0e0;
+                margin: 4px 8px;
+            }
+        """ if SystemTrayManager._is_light_theme() else """
+            QMenu {
+                background-color: #2b2b2b;
+                border: 1px solid #3c3c3c;
+                border-radius: 8px;
+                padding: 4px;
+                font-family: "Segoe UI", Arial, sans-serif;
+                font-size: 13px;
+            }
+            QMenu::item {
+                border-radius: 4px;
+                padding: 6px 24px 6px 12px;
+                color: #ffffff;
+            }
+            QMenu::item:selected {
+                background-color: #3c3c3c;
+                color: #fff;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #3c3c3c;
+                margin: 4px 8px;
+            }
+        """
+
+    @staticmethod
+    def _is_light_theme() -> bool:
+        """Detect Windows 11 light/dark mode via registry."""
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+            ) as key:
+                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+                return value == 1
+        except Exception:
+            return True  # default to light
+
+    def _sync_tooltip_theme(self) -> None:
+        """Inform Windows 11 to respect dark mode for the tooltip window."""
+        if not self.tray_icon:
+            return
+        # Use undocumented Windows API flag to allow dark tooltips
+        hwnd = int(self.tray_icon.winId())
+        DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+        dark = 1 if not SystemTrayManager._is_light_theme() else 0
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_USE_IMMERSIVE_DARK_MODE,
+            ctypes.byref(ctypes.c_int(dark)),
+            ctypes.sizeof(ctypes.c_int)
+        )
 
 class AutoClickerApp(QMainWindow):
     """Main application window."""
@@ -1534,17 +1743,17 @@ class AutoClickerApp(QMainWindow):
         FileManager.write_file(Config.UPDATE_CHECK_FILE, datetime.now().isoformat())
 
     def _on_update_available(self, info: dict, separator: str = "\n", otherseparator: str = "\n\n") -> None:
-        """Handle update available signal."""
-        reply = QMessageBox.question(
-            self, "Update Available",
-            f"New version {info['version']} available!{otherseparator}"
-            f"Current: v{self.current_version}{separator}Latest: v{info['version']}{otherseparator}"
-            f"Visit GitHub for download?",
-            QMessageBox.Yes | QMessageBox.No
+        """Handle update-available signal: show modal, open browser, log."""
+        new_version = info.get("version", "unknown")
+        msg = (
+            f"New version {new_version} available!{otherseparator}"
+            f"Current: v{self.current_version}{separator}Latest: v{new_version}{otherseparator}"
+            "Visit GitHub for download?"
         )
-        if reply == QMessageBox.Yes:
-            webbrowser.open(info['download_url'])
-        self.logger.log(f"🆕 Update available: v{info['version']}")
+        if QMessageBox.question(self, "Update Available", msg,
+                                QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
+            webbrowser.open(info.get("download_url", "https://github.com/" + Config.GITHUB_REPO))
+        self.logger.log(f"🆕 Update available: v{new_version}")
 
     def _on_check_completed(self, success: bool, message: str) -> None:
         """Handle update check completion."""
@@ -1563,7 +1772,7 @@ class AutoClickerApp(QMainWindow):
         self.hide()
 
     def kill_application(self) -> None:
-        """Immediately terminate the application with full cleanup."""
+        """Immediately terminate the application with full cleanup (Windows 11 optimized)."""
         self.logger.log("🚫 Kill switch activated: Terminating application...")
         # Stop the clicker engine
         if self.clicker.running:
@@ -1587,6 +1796,12 @@ class AutoClickerApp(QMainWindow):
                 self.tray.tray_icon.deleteLater()
             except Exception as e:
                 self.logger.log(f"Failed to clean up system tray: {e}")
+        # Windows 11: force release any Win32 hooks
+        if sys.platform == "win32":
+            try:
+                ctypes.windll.user32.UnhookWindowsHookEx(0)
+            except Exception:
+                pass
         try:
             # Quit the application
             QApplication.quit()
@@ -1772,113 +1987,9 @@ class InstanceDialog(QDialog):
         )
         if choice == QMessageBox.Yes:
             self.done(2)
-            
-class SplashScreen(QWidget):
-    """Frameless splash window with progress bar and version label."""
-
-    _STYLE = """
-        background-color: #2b2b2b;
-    """
-    _TITLE_STYLE = """
-        color: #ffffff;
-        font-size: 24px;
-        font-weight: bold;
-    """
-    _SUBTITLE_STYLE = """
-        color: #aaaaaa;
-        font-size: 12px;
-    """
-    _VERSION_STYLE = """
-        color: #666666;
-        font-size: 21px;
-    """
-    _PROGRESS_STYLE = """
-        QProgressBar {
-            background-color: #3c3c3c;
-            border-radius: 5px;
-            text-align: center;
-        }
-        QProgressBar::chunk {
-            background-color: #00aaff;
-            border-radius: 5px;
-        }
-    """
-
-    def __init__(self, timeout: int = 3000, parent: Optional[QWidget] = None) -> None:
-        super().__init__(parent)
-        self._dots = 0
-        self._base_text = "Loading"
-        self._subtitle_timer: Optional[QTimer] = None
-        self._build_ui()
-        QTimer.singleShot(timeout, self.close)
-
-    # ------------------------------------------------------------------
-    # UI construction
-    # ------------------------------------------------------------------
-    def _build_ui(self) -> None:
-        self.setWindowTitle(Config.APP_NAME)
-        self.setWindowFlags(Qt.FramelessWindowHint)
-        self.setFixedSize(400, 250)
-        self.setStyleSheet(self._STYLE)
-        self._center_on_screen()
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.addWidget(self._create_title(), alignment=Qt.AlignCenter)
-        layout.addSpacing(10)
-        layout.addWidget(self._create_subtitle(), alignment=Qt.AlignCenter)
-        layout.addSpacing(30)
-        layout.addWidget(self._create_progress(), alignment=Qt.AlignCenter)
-        layout.addSpacing(10)
-        layout.addWidget(self._create_version(), alignment=Qt.AlignCenter)
-
-    # ------------------------------------------------------------------
-    # Widget factories
-    # ------------------------------------------------------------------
-    def _create_title(self) -> QLabel:
-        lbl = QLabel(Config.APP_NAME)
-        lbl.setStyleSheet(self._TITLE_STYLE)
-        lbl.setAlignment(Qt.AlignCenter)
-        return lbl
-
-    def _create_subtitle(self) -> QLabel:
-        lbl = QLabel(self._base_text)
-        lbl.setStyleSheet(self._SUBTITLE_STYLE)
-        lbl.setAlignment(Qt.AlignCenter)
-
-        def animate() -> None:
-            self._dots = (self._dots + 1) % 4
-            lbl.setText(self._base_text + "." * self._dots + " " * (3 - self._dots))
-
-        self._subtitle_timer = QTimer(lbl)
-        self._subtitle_timer.timeout.connect(animate)
-        self._subtitle_timer.start(350)
-
-        return lbl
-
-    def _create_progress(self) -> QProgressBar:
-        bar = QProgressBar()
-        bar.setRange(0, 0)  # indeterminate
-        bar.setFixedWidth(300)
-        bar.setStyleSheet(self._PROGRESS_STYLE)
-        return bar
-
-    def _create_version(self) -> QLabel:
-        version = FileManager.read_file(Config.VERSION_FILE, Config.DEFAULT_VERSION)
-        lbl = QLabel(f"v{version}")
-        lbl.setStyleSheet(self._VERSION_STYLE)
-        lbl.setAlignment(Qt.AlignCenter)
-        return lbl
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-    def _center_on_screen(self) -> None:
-        screen_geo = QApplication.primaryScreen().geometry()
-        self.move(screen_geo.center() - self.rect().center())
 
 class ApplicationLauncher:
-    """Orchestrates application startup with singleton enforcement."""
+    """Windows-11-optimized application launcher with singleton enforcement."""
 
     def __init__(self) -> None:
         self.logger = self._setup_logger()
@@ -1900,6 +2011,22 @@ class ApplicationLauncher:
         OSCompatibilityChecker.show_compatibility_dialog(compat, logger)
         return compat["compatible"]
 
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+    def run(self) -> None:
+        if not self._check_os_compatibility(self.logger):
+            sys.exit(1)
+
+        app = self._build_qapplication()
+        self._set_app_icon(app, self.logger)
+
+        lock = self._handle_singleton_lock(self.logger)
+        self._run_main_app(app, lock, self.logger)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
     @staticmethod
     def _build_qapplication() -> QApplication:
         # Destroy any existing QApplication instance cleanly
@@ -1907,9 +2034,16 @@ class ApplicationLauncher:
             existing.quit()
             existing.deleteLater()
             QApplication.processEvents()
-            time.sleep(0.1)  # brief grace period
+            time.sleep(0.05)  # shorter grace period for Win11 speed
 
-        # Disable high-DPI scaling to avoid Windows permission warnings
+        # Windows 11: enable native DPI awareness v2 for crisp rendering
+        if sys.platform == "win32":
+            try:
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+            except Exception:
+                pass  # fallback silently
+
+        # Use PassThrough to avoid Qt’s scaling rounding issues on Win11
         QApplication.setHighDpiScaleFactorRoundingPolicy(
             Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
         )
@@ -1918,6 +2052,20 @@ class ApplicationLauncher:
         app.setQuitOnLastWindowClosed(False)
         app.setApplicationName(Config.APP_NAME)
         app.setOrganizationName(Config.AUTHORNAME)
+
+        # Windows 11 dark-mode aware title bar (build 22000+)
+        if sys.platform == "win32":
+            try:
+                build = int(platform.version().split('.')[2])
+                if build >= 22000:  # Win11
+                    app.setStyleSheet("QMainWindow{ background-color:#1e1e2e; }")
+                    # Dark title bar via Win32 API
+                    ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                        ctypes.c_void_p(0), 20, ctypes.byref(ctypes.c_int(2)), ctypes.sizeof(ctypes.c_int)
+                    )
+            except Exception:
+                pass
+
         return app
 
     @staticmethod
@@ -1927,9 +2075,6 @@ class ApplicationLauncher:
         except Exception as exc:
             logger.log(f"Failed to set app icon: {exc}")
 
-    # ------------------------------------------------------------------
-    # Singleton & lifecycle
-    # ------------------------------------------------------------------
     @staticmethod
     def _handle_singleton_lock(logger: Logger) -> SingletonLock:
         lock = SingletonLock(logger=logger)
@@ -1963,41 +2108,15 @@ class ApplicationLauncher:
 
     @staticmethod
     def _run_main_app(app: QApplication, lock: SingletonLock, logger: Logger) -> None:
-        splash = SplashScreen()
-        splash.show()
-        app.processEvents()  # ensure splash paints immediately
-
+        main_window = AutoClickerApp(lock)
         try:
-            main_window = AutoClickerApp(lock)
-        except Exception as exc:
-            logger.log(f"Application error during initialization: {exc}")
-            splash.close()
-            lock.release_lock()
-            sys.exit(1)
-
-        # Close splash after 3 seconds and show main window
-        QTimer.singleShot(3000, lambda: (splash.close(), main_window.show()))
-
-        try:
+            main_window.show()
             sys.exit(app.exec())
         except Exception as exc:
             logger.log(f"Application runtime error: {exc}")
             sys.exit(1)
         finally:
             lock.release_lock()
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-    def run(self) -> None:
-        if not self._check_os_compatibility(self.logger):
-            sys.exit(1)
-
-        app = self._build_qapplication()
-        self._set_app_icon(app, self.logger)
-
-        lock = self._handle_singleton_lock(self.logger)
-        self._run_main_app(app, lock, self.logger)
 
 class AppLauncher:
     """Thin wrapper to start the application."""
