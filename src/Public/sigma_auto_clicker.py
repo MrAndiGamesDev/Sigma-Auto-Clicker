@@ -1613,6 +1613,24 @@ class SystemTrayManager:
             ctypes.sizeof(ctypes.c_int)
         )
 
+    # ------------------------------------------------------------------
+    # Windows 11 specific
+    # ------------------------------------------------------------------
+    def _sync_tooltip_theme(self) -> None:
+        """Inform Windows 11 to respect dark mode for the tooltip window."""
+        if not self.tray_icon:
+            return
+        # Use undocumented Windows API flag to allow dark tooltips
+        hwnd = int(self.tray_icon.winId())
+        DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+        dark = 1 if not SystemTrayManager._is_light_theme() else 0
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_USE_IMMERSIVE_DARK_MODE,
+            ctypes.byref(ctypes.c_int(dark)),
+            ctypes.sizeof(ctypes.c_int)
+        )
+
 class AutoClickerApp(QMainWindow):
     """Main application window."""
     def __init__(self, lock: SingletonLock):
@@ -2024,7 +2042,6 @@ class ApplicationLauncher:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-
     def run(self) -> None:
         if not self._check_os_compatibility():
             sys.exit(1)
@@ -2052,7 +2069,6 @@ class ApplicationLauncher:
         app.setQuitOnLastWindowClosed(False)
         app.setApplicationName(Config.APP_NAME)
         app.setOrganizationName(Config.AUTHORNAME)
-
         return app
 
     def _set_app_icon(self, app: QApplication) -> None:
