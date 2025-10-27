@@ -148,6 +148,7 @@ class Config(metaclass=_MetaConfig):
             version="1.1.3-alpha.2",
             description=(
                 "Refactored a source code into matching to win11 UI. "
+                "Moved win32ui into a diff module. "
                 "and much more!. "
             ),
         ),
