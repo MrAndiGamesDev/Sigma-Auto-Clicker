@@ -145,6 +145,14 @@ class Config(metaclass=_MetaConfig):
     UPDATE_LOGS: Final[List[UpdateLogEntry]] = [
         UpdateLogEntry(
             date="2025-10-27",
+            version="1.1.3-alpha.3",
+            description=(
+                "Fixed versioning bug. "
+                "and much more!. "
+            ),
+        ),
+        UpdateLogEntry(
+            date="2025-10-27",
             version="1.1.3-alpha.2",
             description=(
                 "Refactored a source code into matching to win11 UI. "
