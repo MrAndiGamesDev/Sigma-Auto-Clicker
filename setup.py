@@ -201,5 +201,5 @@ class PyInstallerBuilder:
             self._exit_script(cleanup_delay)
 
 if __name__ == "__main__":
-    PyConverter = PyInstallerBuilder()
-    PyConverter.run()
+    PyToExeConverter = PyInstallerBuilder()
+    PyToExeConverter.run()

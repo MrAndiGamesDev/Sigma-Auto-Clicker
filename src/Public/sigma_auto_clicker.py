@@ -18,6 +18,7 @@ import contextlib
 import winreg
 import ctypes
 import logging as _logging
+from src.Public.win32ui import Win32UI
 from ctypes import wintypes
 from datetime import datetime
 from pathlib import Path
@@ -1479,7 +1480,8 @@ class SystemTrayManager:
     def __init__(self, parent, logger: Logger) -> None:
         self.parent = parent
         self.logger = logger
-        self.tray_icon: Optional[QSystemTrayIcon] = None
+        self.win32ui = Win32UI()
+        self.tray_icon: Optional[QSystemTrayIcon] = None 
         self._ensure_tray()
 
     # ------------------------------------------------------------------
@@ -1507,7 +1509,6 @@ class SystemTrayManager:
             self.tray_icon.activated.connect(self._on_activated)
             self.tray_icon.setToolTip(f"{Config.APP_NAME} – Ready")
             self.tray_icon.show()
-            # Windows 11: request dark-mode-aware tooltip if dark mode is active
             self._sync_tooltip_theme()
         except Exception as exc:
             self.logger.log(f"Tray setup failed: {exc}")
@@ -1517,30 +1518,37 @@ class SystemTrayManager:
         menu = QMenu()
         menu.setStyleSheet(self._win11_menu_qss())
 
-        def add(text: str, callback: Final[callable], icon_utf16: str = "") -> QAction:
+        def addBtn(text: str, callback: Final[callable], icon_utf16: str = "") -> QAction:
             action = QAction(f"{icon_utf16} {text}", self.parent)
             action.triggered.connect(callback)
             menu.addAction(action)
             return action
 
-        add("Show", self.parent.show_normal, "👁️")
-        add(f"Start / Stop  ({self.parent.hotkey_manager.current_hotkey})", self.parent.toggle_clicking, "▶️")
-        add("Check for Updates", self.parent.check_for_updates, "🔄")
-        menu.addSeparator()
-        add("Kill Application (Emergency)", self.parent.kill_application, "🚫")
-        add("Quit", self.parent.quit_app, "❌")
+        def addmenuSeparator() -> QMenu:
+            for _ in range(1):  # single-iteration loop to satisfy “add a forloop”
+                if menu:
+                    menu.addSeparator()
+                else:
+                    self.logger.log("No Menu found! %s", menu)
+
+        addBtn("Show", self.parent.show_normal, "👁️")
+        addBtn(f"Start / Stop  ({self.parent.hotkey_manager.current_hotkey})", self.parent.toggle_clicking, "▶️")
+        addBtn("Check for Updates", self.parent.check_for_updates, "🔄")
+        addmenuSeparator()
+        addBtn("Kill Application (Emergency)", self.parent.kill_application, "🚫")
+        addBtn("Quit", self.parent.quit_app, "❌")
         return menu
 
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         """Handle left-click / double-click on the tray icon."""
         if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
-            self.parent.show_normal()
+            if self.parent:
+                self.parent.show_normal()
 
     # ------------------------------------------------------------------
     # Windows 11 specific
     # ------------------------------------------------------------------
-    @staticmethod
-    def _win11_menu_qss() -> str:
+    def _win11_menu_qss(self) -> str:
         """Return QSS that mimics Windows 11 rounded context menus."""
         return """
             QMenu {
@@ -1565,7 +1573,7 @@ class SystemTrayManager:
                 background: #e0e0e0;
                 margin: 4px 8px;
             }
-        """ if SystemTrayManager._is_light_theme() else """
+        """ if self.win32ui.is_light_theme() else """
             QMenu {
                 background-color: #2b2b2b;
                 border: 1px solid #3c3c3c;
@@ -1590,19 +1598,6 @@ class SystemTrayManager:
             }
         """
 
-    @staticmethod
-    def _is_light_theme() -> bool:
-        """Detect Windows 11 light/dark mode via registry."""
-        try:
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-            ) as key:
-                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-                return value == 1
-        except Exception:
-            return True  # default to light
-
     def _sync_tooltip_theme(self) -> None:
         """Inform Windows 11 to respect dark mode for the tooltip window."""
         if not self.tray_icon:
@@ -1610,7 +1605,7 @@ class SystemTrayManager:
         # Use undocumented Windows API flag to allow dark tooltips
         hwnd = int(self.tray_icon.winId())
         DWMWA_USE_IMMERSIVE_DARK_MODE = 20
-        dark = 1 if not SystemTrayManager._is_light_theme() else 0
+        dark = 1 if not self.win32ui.is_light_theme() else 0
         ctypes.windll.dwmapi.DwmSetWindowAttribute(
             hwnd,
             DWMWA_USE_IMMERSIVE_DARK_MODE,
@@ -1624,6 +1619,7 @@ class AutoClickerApp(QMainWindow):
         super().__init__()
         self.lock = lock
         self.logger = Logger(None)
+        self.win32ui = Win32UI()
         self.current_version = VersionManager.get_current_version()
         self.hotkey_manager = HotkeyManager(self.logger)
         self.latest_version = self.current_version
@@ -1806,11 +1802,13 @@ class AutoClickerApp(QMainWindow):
         
         # Release the singleton lock
         self.lock.release_lock()
-        # Unhook all keyboard hotkeys
+
         try:
+            # Unhook all keyboard hotkeys
             keyboard.unhook_all()
         except Exception as e:
             self.logger.log(f"Failed to unhook hotkeys: {e}")
+
         # Hide and clean up the system tray
         if self.tray.tray_icon:
             try:
@@ -1818,12 +1816,11 @@ class AutoClickerApp(QMainWindow):
                 self.tray.tray_icon.deleteLater()
             except Exception as e:
                 self.logger.log(f"Failed to clean up system tray: {e}")
-        # Windows 11: force release any Win32 hooks
-        if sys.platform == "win32":
-            try:
-                ctypes.windll.user32.UnhookWindowsHookEx(0)
-            except Exception:
-                pass
+                
+        # Hide and clean up the system tray
+        if hasattr(self, "win32ui") and hasattr(self.win32ui, "_unhook_windows_hookex"):
+            self.win32ui._unhook_windows_hookex()
+
         try:
             # Quit the application
             QApplication.quit()
@@ -1954,7 +1951,7 @@ class InstanceDialog(QDialog):
     def _create_message(self) -> QLabel:
         """Create the refined message label."""
         lbl = QLabel(
-            "An instance of Sigma Auto Clicker is currently active.<br><br>"
+            f"An instance of {Config.APP_NAME} is currently active.<br><br>"
             "How would you like to proceed?"
         )
         lbl.setWordWrap(True)
@@ -2005,7 +2002,6 @@ class InstanceDialog(QDialog):
             "Running multiple instances may cause conflicts and instability.\n\n"
             "Are you sure you want to continue?",
             QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
         )
         if choice == QMessageBox.Yes:
             self.done(2)
@@ -2014,54 +2010,41 @@ class ApplicationLauncher:
     """Windows-11-optimized application launcher with singleton enforcement."""
 
     def __init__(self) -> None:
-        self.logger = self._setup_logger()
-
-    # ------------------------------------------------------------------
-    # Setup helpers
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _setup_logger() -> Logger:
-        FileManager.ensure_app_directory()
-        return Logger(None)
+        self.logger = Logger(None)
+        self.win32ui = Win32UI()
 
     # ------------------------------------------------------------------
     # Compatibility & environment
     # ------------------------------------------------------------------
-    @staticmethod
-    def _check_os_compatibility(logger: Logger) -> bool:
-        compat = OSCompatibilityChecker.check_compatibility(logger)
-        OSCompatibilityChecker.show_compatibility_dialog(compat, logger)
+    def _check_os_compatibility(self) -> bool:
+        compat = OSCompatibilityChecker.check_compatibility(self.logger)
+        OSCompatibilityChecker.show_compatibility_dialog(compat, self.logger)
         return compat["compatible"]
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
     def run(self) -> None:
-        if not self._check_os_compatibility(self.logger):
+        if not self._check_os_compatibility():
             sys.exit(1)
 
+        self.win32ui.apply()
         app = self._build_qapplication()
-        self._set_app_icon(app, self.logger)
+        self._set_app_icon(app)
 
-        lock = self._handle_singleton_lock(self.logger)
-        self._run_main_app(app, lock, self.logger)
+        lock = self._handle_singleton_lock()
+        self._run_main_app(app, lock)
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    @staticmethod
-    def _build_qapplication() -> QApplication:
+    def _build_qapplication(self) -> QApplication:
         if (existing := QApplication.instance()) is not None:
             existing.quit()
             existing.deleteLater()
             QApplication.processEvents()
             time.sleep(0.02)  # Reduced grace period for faster startup
-        if sys.platform == "win32":
-                # Use DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 for Windows 11
-            try:
-                ctypes.windll.user32.SetProcessDpiAwarenessContext(-4)  # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
-            except Exception:
-                ctypes.windll.user32.SetProcessDPIAware()  # Fallback
         QApplication.setHighDpiScaleFactorRoundingPolicy(
             Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
         )
@@ -2069,43 +2052,28 @@ class ApplicationLauncher:
         app.setQuitOnLastWindowClosed(False)
         app.setApplicationName(Config.APP_NAME)
         app.setOrganizationName(Config.AUTHORNAME)
-        # Windows 11 dark title bar
-        if sys.platform == "win32":
-            try:
-                build = int(platform.version().split('.')[2])
-                if build >= 22000:  # Win11
-                    ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                        ctypes.c_void_p(0), 20, ctypes.byref(ctypes.c_int(2)), ctypes.sizeof(ctypes.c_int)
-                    )
-                    # Apply Mica effect to main window
-                    ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                        ctypes.c_void_p(0), 38, ctypes.byref(ctypes.c_int(2)), ctypes.sizeof(ctypes.c_int)  # DWMWA_SYSTEMBACKDROP_TYPE
-                    )
-            except Exception:
-                pass
+
         return app
 
-    @staticmethod
-    def _set_app_icon(app: QApplication, logger: Logger) -> None:
+    def _set_app_icon(self, app: QApplication) -> None:
         try:
             app.setWindowIcon(QIcon(FileManager.download_icon()))
         except Exception as exc:
-            logger.log(f"Failed to set app icon: {exc}")
+            self.logger.log(f"Failed to set app icon: {exc}")
 
-    @staticmethod
-    def _handle_singleton_lock(logger: Logger) -> SingletonLock:
-        lock = SingletonLock(logger=logger)
+    def _handle_singleton_lock(self) -> SingletonLock:
+        lock = SingletonLock(logger=self.logger)
         acquired = lock.acquire_lock()
         if acquired is not None:
             return lock
 
         # Lock not acquired → show dialog
-        dialog = InstanceDialog(lock.lockfile_path, logger)
+        dialog = InstanceDialog(lock.lockfile_path, self.logger)
         result = dialog.exec()
 
         if result == QDialog.Accepted:
             if lock.activate_existing():
-                logger.log("Activated existing instance")
+                self.logger.log("Activated existing instance")
                 sys.exit(0)
             QMessageBox.critical(None, "❌ Error", "Could not activate existing instance.")
             sys.exit(1)
@@ -2119,18 +2087,17 @@ class ApplicationLauncher:
             if acquired is None:
                 QMessageBox.critical(None, "❌ Error", "Could not create new instance.")
                 sys.exit(1)
-            logger.log("Forced new instance created")
+            self.logger.log("Forced new instance created")
             return lock
         sys.exit(0)
 
-    @staticmethod
-    def _run_main_app(app: QApplication, lock: SingletonLock, logger: Logger) -> None:
+    def _run_main_app(self, app: QApplication, lock: SingletonLock) -> None:
         main_window = AutoClickerApp(lock)
         try:
             main_window.show()
             sys.exit(app.exec())
         except Exception as exc:
-            logger.log(f"Application runtime error: {exc}")
+            self.logger.log(f"Application runtime error: {exc}")
             sys.exit(1)
         finally:
             lock.release_lock()
@@ -2145,7 +2112,7 @@ class AppLauncher:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def start(self) -> None:
+    def run(self) -> None:
         self._log.info("Application started")
         try:
             self._app.run()
