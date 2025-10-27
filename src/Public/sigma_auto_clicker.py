@@ -148,6 +148,8 @@ class Config(metaclass=_MetaConfig):
             version="1.1.3-alpha.2",
             description=(
                 "Refactored a source code into matching to win11 UI. "
+                "Moved win32ui into a diff module. "
+                "Added terminal when executing this application. "
                 "and much more!. "
             ),
         ),
@@ -1616,70 +1618,6 @@ class SystemTrayManager:
     # ------------------------------------------------------------------
     # Windows 11 specific
     # ------------------------------------------------------------------
-    @staticmethod
-    def _win11_menu_qss() -> str:
-        """Return QSS that mimics Windows 11 rounded context menus."""
-        return """
-            QMenu {
-                background-color: #f3f3f3;
-                border: 1px solid #e5e5e5;
-                border-radius: 8px;
-                padding: 4px;
-                font-family: "Segoe UI", Arial, sans-serif;
-                font-size: 13px;
-            }
-            QMenu::item {
-                border-radius: 4px;
-                padding: 6px 24px 6px 12px;
-                color: #202020;
-            }
-            QMenu::item:selected {
-                background-color: #e5e5e5;
-                color: #000;
-            }
-            QMenu::separator {
-                height: 1px;
-                background: #e0e0e0;
-                margin: 4px 8px;
-            }
-        """ if SystemTrayManager._is_light_theme() else """
-            QMenu {
-                background-color: #2b2b2b;
-                border: 1px solid #3c3c3c;
-                border-radius: 8px;
-                padding: 4px;
-                font-family: "Segoe UI", Arial, sans-serif;
-                font-size: 13px;
-            }
-            QMenu::item {
-                border-radius: 4px;
-                padding: 6px 24px 6px 12px;
-                color: #ffffff;
-            }
-            QMenu::item:selected {
-                background-color: #3c3c3c;
-                color: #fff;
-            }
-            QMenu::separator {
-                height: 1px;
-                background: #3c3c3c;
-                margin: 4px 8px;
-            }
-        """
-
-    @staticmethod
-    def _is_light_theme() -> bool:
-        """Detect Windows 11 light/dark mode via registry."""
-        try:
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-            ) as key:
-                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-                return value == 1
-        except Exception:
-            return True  # default to light
-
     def _sync_tooltip_theme(self) -> None:
         """Inform Windows 11 to respect dark mode for the tooltip window."""
         if not self.tray_icon:
@@ -1924,55 +1862,64 @@ class AutoClickerApp(QMainWindow):
         QApplication.quit()
 
 class InstanceDialog(QDialog):
-    """Premium-styled dialog for handling multiple instance detection."""
+    """Windows 11 fluent-style dialog for handling multiple-instance detection."""
 
+    # Mica-like backdrop & rounded corners
     _DIALOG_CSS = """
         QWidget#dialogFrame{
-            background-color:#1e1e2e;
-            border-radius:16px;
-            border:1px solid #333;
+            background-color:#202020;          /* Mica dark tint */
+            border-radius:12px;
+            border:1px solid rgba(255,255,255,15);
         }
     """
 
+    # Segoe UI Variable – Windows 11 default
     _TITLE_CSS = """
-        font-size:18px;
+        font-family:"Segoe UI Variable", "Segoe UI", sans-serif;
+        font-size:20px;
         font-weight:600;
         color:#ffffff;
-        letter-spacing:0.5px;
+        letter-spacing:0.2px;
     """
 
+    # Close button: subtle → accent on hover
     _CLOSE_BTN_CSS = """
         QPushButton{
-            background-color:#2e2e3e;
-            color:#aaa;
+            background-color:transparent;
+            color:rgba(255,255,255,180);
             border:none;
-            border-radius:14px;
-            font-weight:bold;
-            font-size:14px;
+            border-radius:4px;
+            font-size:16px;
+            padding:6px;
         }
-        QPushButton:hover{background-color:#ff4757; color:#fff;}
+        QPushButton:hover{background-color:rgba(255,255,255,20);}
+        QPushButton:pressed{background-color:rgba(255,255,255,10);}
     """
 
+    # Message body with subtle card
     _MSG_CSS = """
+        font-family:"Segoe UI Variable", "Segoe UI", sans-serif;
         font-size:14px;
-        color:#c9c9d9;
-        line-height:22px;
-        padding:16px;
+        color:#e0e0e0;
         background-color:rgba(255,255,255,5);
         border-radius:8px;
+        padding:16px;
     """
 
+    # Accent buttons using Win11 palette
     _BTN_CSS_TPL = """
         QPushButton{{
             background-color:{accent};
             color:#ffffff;
             border:none;
-            border-radius:8px;
-            font-weight:600;
+            border-radius:6px;
+            font-family:"Segoe UI Variable", "Segoe UI", sans-serif;
+            font-weight:500;
             font-size:14px;
-            padding:0 20px;
+            padding:8px 20px;
         }}
         QPushButton:hover{{background-color:{hover};}}
+        QPushButton:pressed{{background-color:{pressed};}}
     """
 
     def __init__(self, lockfile_path: Path, logger: Logger, parent=None):
@@ -1983,7 +1930,7 @@ class InstanceDialog(QDialog):
         self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setModal(True)
-        self.setFixedSize(480, 240)
+        self.setFixedSize(460, 220)
         self._build_ui()
         self._apply_shadow()
 
@@ -1991,7 +1938,6 @@ class InstanceDialog(QDialog):
     # UI Construction
     # ------------------------------------------------------------------
     def _build_ui(self) -> None:
-        """Assemble the premium dialog layout and widgets."""
         main = QVBoxLayout()
         main.setContentsMargins(0, 0, 0, 0)
 
@@ -2000,8 +1946,8 @@ class InstanceDialog(QDialog):
         frame.setStyleSheet(self._DIALOG_CSS)
 
         lay = QVBoxLayout(frame)
-        lay.setSpacing(12)
-        lay.setContentsMargins(24, 24, 24, 24)
+        lay.setSpacing(16)
+        lay.setContentsMargins(20, 20, 20, 20)
 
         lay.addLayout(self._create_header())
         lay.addWidget(self._create_message())
@@ -2011,17 +1957,16 @@ class InstanceDialog(QDialog):
         self.setLayout(main)
 
     def _create_header(self) -> QHBoxLayout:
-        """Create the sleek header with icon and title."""
         lay = QHBoxLayout()
 
         icon = QLabel("🖱️")
-        icon.setStyleSheet("font-size:28px; padding:0px;")
+        icon.setStyleSheet("font-size:24px;")
 
         title = QLabel("Already Running")
         title.setStyleSheet(self._TITLE_CSS)
 
         close = QPushButton("✕")
-        close.setFixedSize(28, 28)
+        close.setFixedSize(32, 32)
         close.setStyleSheet(self._CLOSE_BTN_CSS)
         close.clicked.connect(self.reject)
 
@@ -2031,29 +1976,28 @@ class InstanceDialog(QDialog):
         return lay
 
     def _create_message(self) -> QLabel:
-        """Create the refined message label."""
         lbl = QLabel(
-            f"An instance of {Config.APP_NAME} is currently active.<br><br>"
+            f"An instance of <b>{Config.APP_NAME}</b> is currently active.<br><br>"
             "How would you like to proceed?"
         )
         lbl.setWordWrap(True)
         lbl.setStyleSheet(self._MSG_CSS)
+        lbl.setTextFormat(Qt.RichText)
         return lbl
 
     def _create_buttons(self) -> QHBoxLayout:
-        """Create premium action buttons."""
         lay = QHBoxLayout()
         lay.setSpacing(12)
 
         self.force_btn = QPushButton("Force New Instance")
         self.exit_btn = QPushButton("Exit")
 
-        for btn, accent, hover in (
-            (self.force_btn, "#ff9800", "#e68900"),
-            (self.exit_btn, "#f44336", "#da190b"),
+        for btn, accent, hover, pressed in (
+            (self.force_btn, "#ff9800", "#e68900", "#c77700"),
+            (self.exit_btn, "#f44336", "#da190b", "#b71c1c"),
         ):
-            btn.setFixedHeight(42)
-            btn.setStyleSheet(self._BTN_CSS_TPL.format(accent=accent, hover=hover))
+            btn.setFixedHeight(38)
+            btn.setStyleSheet(self._BTN_CSS_TPL.format(accent=accent, hover=hover, pressed=pressed))
 
         self.exit_btn.clicked.connect(self.reject)
         self.force_btn.clicked.connect(self._on_force_new)
@@ -2066,18 +2010,16 @@ class InstanceDialog(QDialog):
     # Helpers
     # ------------------------------------------------------------------
     def _apply_shadow(self) -> None:
-        """Add drop shadow for depth."""
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(24)
-        shadow.setOffset(0, 8)
-        shadow.setColor("#00000080")
+        shadow.setBlurRadius(30)
+        shadow.setOffset(0, 6)
+        shadow.setColor(QColor(0, 0, 0, 100))
         self.setGraphicsEffect(shadow)
 
     # ------------------------------------------------------------------
     # Event Handlers
     # ------------------------------------------------------------------
     def _on_force_new(self) -> None:
-        """Prompt for confirmation and close with code 2 if approved."""
         choice = QMessageBox.warning(
             self,
             "Confirmation",
@@ -2134,7 +2076,6 @@ class ApplicationLauncher:
         app.setQuitOnLastWindowClosed(False)
         app.setApplicationName(Config.APP_NAME)
         app.setOrganizationName(Config.AUTHORNAME)
-
         return app
 
     def _set_app_icon(self, app: QApplication) -> None:
