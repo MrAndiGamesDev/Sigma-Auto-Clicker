@@ -145,6 +145,14 @@ class Config(metaclass=_MetaConfig):
     UPDATE_LOGS: Final[List[UpdateLogEntry]] = [
         UpdateLogEntry(
             date="2025-10-27",
+            version="1.1.3-alpha.4",
+            description=(
+                "Fixed versioning bug again. "
+                "and much more!. "
+            ),
+        ),
+        UpdateLogEntry(
+            date="2025-10-27",
             version="1.1.3-alpha.3",
             description=(
                 "Fixed versioning bug. "
@@ -1091,6 +1099,14 @@ class VersionManager:
         except Exception:
             return new > current
 
+    # ---------- apply downloaded version ----------
+    @staticmethod
+    def apply_downloaded_version(new_version: str) -> None:
+        """Update local version tracking to the newly-downloaded version."""
+        VersionManager._write_version(Config.VERSION_FILE, new_version)
+        VersionManager._write_version(VersionManager._LOCAL_VERSION_FILE, new_version)
+        VersionManager.cache_latest_version(new_version)
+
 class UpdateChecker(QThread):
     """Thread for checking application updates asynchronously."""
     update_available = pyqtSignal(dict)
@@ -1119,6 +1135,7 @@ class UpdateChecker(QThread):
             else:
                 self.check_completed.emit(True, f"You're up to date! (v{self._current_version})")
             VersionManager.cache_latest_version(latest_version)
+            VersionManager.apply_downloaded_version(latest_version)
         else:
             self.check_completed.emit(False, "Failed to fetch update information")
 
