@@ -5,6 +5,7 @@ from time import sleep
 from typing import Optional, List
 from dataclasses import dataclass
 from pathlib import Path
+import psutil  # new dependency to find and kill locking processes
 
 @dataclass
 class Config:
@@ -101,17 +102,49 @@ class PyInstallerBuilder:
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
+    def _kill_locking_processes(self, path: Path) -> None:
+        """Attempt to terminate processes that have open handles to the given path."""
+        try:
+            for proc in psutil.process_iter(["pid", "name", "open_files"]):
+                try:
+                    for file in proc.info["open_files"] or []:
+                        if file and path.resolve() in Path(file.path).resolve().parents:
+                            self.logger.Log(
+                                "warning",
+                                f"Killing process {proc.info['name']} (PID {proc.info['pid']}) locking {path}",
+                            )
+                            proc.kill()
+                            proc.wait(timeout=3)
+                            break
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as exc:
+            self.logger.Log("warning", f"Could not inspect locking processes: {exc}")
+
     def _remove_directory(self, path: Path) -> None:
         self.logger.Log("debug", f"Attempting to remove directory: {path}")
         if not path.exists():
             self.logger.Log("info", f"'{path}' directory not found — skipping.")
             return
-        self.logger.Log("info", f"Removing '{path}' directory...")
-        try:
-            shutil.rmtree(path, ignore_errors=True)
-            self.logger.Log("success", f"'{path}' directory removed successfully.")
-        except Exception as exc:
-            self.logger.Log("warning", f"Failed to remove '{path}': {exc}")
+
+        # Try up to 3 times with escalating delays
+        for attempt in range(1, 4):
+            try:
+                self._kill_locking_processes(path)
+                shutil.rmtree(path, ignore_errors=False)
+                self.logger.Log("success", f"'{path}' directory removed successfully.")
+                return
+            except PermissionError as exc:
+                self.logger.Log(
+                    "warning",
+                    f"Attempt {attempt}/3: Permission denied removing '{path}': {exc}",
+                )
+                sleep(attempt * 1.5)
+            except Exception as exc:
+                self.logger.Log("warning", f"Failed to remove '{path}': {exc}")
+                return
+
+        self.logger.Log("error", f"Could not remove '{path}' after 3 attempts.")
 
     def _remove_file(self, file_path: Path) -> bool:
         self.logger.Log("debug", f"Attempting to remove file: {file_path}")

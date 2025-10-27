@@ -939,12 +939,13 @@ class VersionManager:
     _LOCAL_VERSION_FILE: Final = Path("VERSION.txt")
     _CACHE_TTL_DAYS: Final = 7
 
+    # ---------- internal helpers ----------
     @staticmethod
     def _read_version(path: Path, default: str | None = None) -> str | None:
-        """Internal helper to read a version file."""
+        """Read a version file with fallback."""
         try:
             content = path.read_text(encoding="utf-8").strip()
-            return content if content else default
+            return content or default
         except FileNotFoundError:
             return default
         except Exception as e:
@@ -953,31 +954,35 @@ class VersionManager:
 
     @staticmethod
     def _write_version(path: Path, version: str) -> None:
-        """Internal helper to write a version file."""
+        """Persist version atomically via FileManager."""
         FileManager.write_file(path, version)
 
+    # ---------- public API ----------
     @staticmethod
     def detect_local_version() -> str:
-        """Detect version from local files or embedded info."""
+        """Return version from local files or default."""
         version = VersionManager._read_version(VersionManager._LOCAL_VERSION_FILE)
         if version:
             VersionManager._write_version(Config.VERSION_FILE, version)
             return version
-        return VersionManager._read_version(Config.VERSION_FILE, Config.DEFAULT_VERSION) or Config.DEFAULT_VERSION
+        return (
+            VersionManager._read_version(Config.VERSION_FILE, Config.DEFAULT_VERSION)
+            or Config.DEFAULT_VERSION
+        )
 
     @staticmethod
-    def get_cached_latest() -> Optional[str]:
-        """Get cached latest version if still valid."""
+    def get_cached_latest() -> str | None:
+        """Return cached latest version if still valid."""
         try:
             if not Config.VERSION_CACHE_FILE.exists():
                 return None
             content = Config.VERSION_CACHE_FILE.read_text(encoding="utf-8").strip().splitlines()
             if len(content) < 2:
                 return None
-            version, timestamp_str = content
+            version, ts_str = content
             if version == Config.DEFAULT_VERSION:
                 return None
-            if (time.time() - int(timestamp_str)) / 86400 > VersionManager._CACHE_TTL_DAYS:
+            if (time.time() - int(ts_str)) / 86400 > VersionManager._CACHE_TTL_DAYS:
                 return None
             return version
         except Exception as e:
@@ -986,18 +991,16 @@ class VersionManager:
 
     @staticmethod
     def cache_latest_version(version: str) -> None:
-        """Cache latest version with timestamp."""
+        """Cache version with current timestamp."""
         FileManager.write_file(Config.VERSION_CACHE_FILE, f"{version}\n{int(time.time())}")
 
     @staticmethod
-    def fetch_latest_release(timeout: float = 10.0, include_prerelease: bool = False) -> ReleaseInfo:
-        """
-        Fetch latest release info from GitHub.
-        If include_prerelease is True, will consider pre-releases as candidates.
-        """
+    def fetch_latest_release(
+        timeout: float = 10.0, include_prerelease: bool = False
+    ) -> ReleaseInfo:
+        """Fetch latest GitHub release; optionally include pre-releases."""
         if not isinstance(timeout, (int, float)) or timeout <= 0:
             return ReleaseInfo.failure("Invalid timeout value")
-            
         if not Config.GITHUB_REPO:
             return ReleaseInfo.failure("Missing GitHub repository configuration")
 
@@ -1044,37 +1047,39 @@ class VersionManager:
 
     @staticmethod
     def get_current_version() -> str:
-        """Get the current application version."""
+        """Return current application version, caching latest if needed."""
+        # Try local VERSION.txt first
         version = VersionManager.detect_local_version()
-        if version != Config.DEFAULT_VERSION:
+        if version and version != Config.DEFAULT_VERSION:
             return version
+
+        # Fallback to cached latest from GitHub
         cached = VersionManager.get_cached_latest()
         if cached:
             VersionManager._write_version(Config.VERSION_FILE, cached)
             return cached
+
+        # Fetch latest from GitHub
         release_info = VersionManager.fetch_latest_release()
         if release_info.success:
             version = release_info.version
             VersionManager.cache_latest_version(version)
             VersionManager._write_version(Config.VERSION_FILE, version)
             return version
+
         return Config.DEFAULT_VERSION
 
     @staticmethod
     def is_newer_version(new: str, current: str) -> bool:
-        """Compare semantic versions, including pre-release identifiers."""
-        def parse_version(v: str) -> tuple[tuple[int, ...], str]:
-            parts = v.split("-", 1)
-            numeric_part = parts[0]
-            prerelease_part = parts[1] if len(parts) > 1 else ""
-            nums = [int(p) if p.isdigit() else 0 for p in numeric_part.split(".")[:3]]
+        """Compare semantic versions including pre-release identifiers."""
+        def parse(v: str) -> tuple[tuple[int, ...], str]:
+            numeric, _, prerelease = v.partition("-")
+            nums = [int(p) if p.isdigit() else 0 for p in numeric.split(".")[:3]]
             nums += [0] * (3 - len(nums))
-            return (tuple(nums), prerelease_part)
+            return (tuple(nums), prerelease)
 
         try:
-            new_parsed = parse_version(new)
-            current_parsed = parse_version(current)
-            return new_parsed > current_parsed
+            return parse(new) > parse(current)
         except Exception:
             return new > current
 
@@ -1777,17 +1782,17 @@ class AutoClickerApp(QMainWindow):
         self.ui.update_version_display(self.current_version, self.latest_version)
         FileManager.write_file(Config.UPDATE_CHECK_FILE, datetime.now().isoformat())
 
-    def _on_update_available(self, info: dict, separator: str = "\n", otherseparator: str = "\n\n") -> None:
+    def _on_update_available(self, info: dict, *, separator: str = "\n", other_separator: str = "\n\n") -> None:
         """Handle update-available signal: show modal, open browser, log."""
         new_version = info.get("version", "unknown")
+        current_version = getattr(self, "current_version", Config.DEFAULT_VERSION)
         msg = (
-            f"New version {new_version} available!{otherseparator}"
-            f"Current: v{self.current_version}{separator}Latest: v{new_version}{otherseparator}"
+            f"New version {new_version} available!{other_separator}"
+            f"Current: v{current_version}{separator}Latest: v{new_version}{other_separator}"
             "Visit GitHub for download?"
         )
-        if QMessageBox.question(self, "Update Available", msg,
-                                QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
-            webbrowser.open(info.get("download_url", "https://github.com/" + Config.GITHUB_REPO))
+        if QMessageBox.question(self, "Update Available", msg, QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
+            webbrowser.open(info.get("download_url", f"https://github.com/{Config.GITHUB_REPO}"))
         self.logger.log(f"🆕 Update available: v{new_version}")
 
     def _on_check_completed(self, success: bool, message: str) -> None:
