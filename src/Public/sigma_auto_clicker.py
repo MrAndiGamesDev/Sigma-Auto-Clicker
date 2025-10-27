@@ -2048,6 +2048,7 @@ class ApplicationLauncher:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
     def run(self) -> None:
         if not self._check_os_compatibility():
             sys.exit(1)
