@@ -1613,6 +1613,88 @@ class SystemTrayManager:
             ctypes.sizeof(ctypes.c_int)
         )
 
+    # ------------------------------------------------------------------
+    # Windows 11 specific
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _win11_menu_qss() -> str:
+        """Return QSS that mimics Windows 11 rounded context menus."""
+        return """
+            QMenu {
+                background-color: #f3f3f3;
+                border: 1px solid #e5e5e5;
+                border-radius: 8px;
+                padding: 4px;
+                font-family: "Segoe UI", Arial, sans-serif;
+                font-size: 13px;
+            }
+            QMenu::item {
+                border-radius: 4px;
+                padding: 6px 24px 6px 12px;
+                color: #202020;
+            }
+            QMenu::item:selected {
+                background-color: #e5e5e5;
+                color: #000;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #e0e0e0;
+                margin: 4px 8px;
+            }
+        """ if SystemTrayManager._is_light_theme() else """
+            QMenu {
+                background-color: #2b2b2b;
+                border: 1px solid #3c3c3c;
+                border-radius: 8px;
+                padding: 4px;
+                font-family: "Segoe UI", Arial, sans-serif;
+                font-size: 13px;
+            }
+            QMenu::item {
+                border-radius: 4px;
+                padding: 6px 24px 6px 12px;
+                color: #ffffff;
+            }
+            QMenu::item:selected {
+                background-color: #3c3c3c;
+                color: #fff;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #3c3c3c;
+                margin: 4px 8px;
+            }
+        """
+
+    @staticmethod
+    def _is_light_theme() -> bool:
+        """Detect Windows 11 light/dark mode via registry."""
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+            ) as key:
+                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+                return value == 1
+        except Exception:
+            return True  # default to light
+
+    def _sync_tooltip_theme(self) -> None:
+        """Inform Windows 11 to respect dark mode for the tooltip window."""
+        if not self.tray_icon:
+            return
+        # Use undocumented Windows API flag to allow dark tooltips
+        hwnd = int(self.tray_icon.winId())
+        DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+        dark = 1 if not SystemTrayManager._is_light_theme() else 0
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_USE_IMMERSIVE_DARK_MODE,
+            ctypes.byref(ctypes.c_int(dark)),
+            ctypes.sizeof(ctypes.c_int)
+        )
+
 class AutoClickerApp(QMainWindow):
     """Main application window."""
     def __init__(self, lock: SingletonLock):
