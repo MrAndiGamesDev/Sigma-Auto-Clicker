@@ -22,7 +22,6 @@ Sigma Auto Clicker allows users to automate mouse clicks efficiently with custom
 
 ## TODO
 - [ ] Add Installer after an update
-- [x] Add logging to a file
 
 ## ⚙️ Installation
 1) Clone the repository:
