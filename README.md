@@ -20,6 +20,9 @@ Sigma Auto Clicker allows users to automate mouse clicks efficiently with custom
 - GUI Framework: PySide6 (switched from CustomTkinter)
 - Dependencies: keyboard, mouse, Pillow, pyautogui, PySide6, PyInstaller, colorama, requests, psutil, pynput, autopep8, dotenv, src/Packages/CustomLogging (custom made)
 
+## TODO
+- [ ] Add Installer after an update
+
 ## ⚙️ Installation
 1) Clone the repository:
 ```powershell
