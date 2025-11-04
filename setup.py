@@ -12,7 +12,6 @@ class Config:
     optimization_lvl: int = 2
     app_name: str = "Sigma Auto Clicker"
     version_file: str = "VERSION.txt"
-    collect_modules: str = "Sigma-Auto-Clicker-Py/"
     icon_path: str = "src/icons/mousepointer.ico"
     debug_mode: bool = False
 
@@ -95,7 +94,6 @@ class PyInstallerBuilder:
             f"--optimize={self.config.optimization_lvl}",
             f"--add-data={self.icon_path};src/icons/",
             f"--add-data={self.version_file};.",
-            f"--collect-submodules={self.config.collect_modules}",
             "--log-level=WARN",
         ]
 
